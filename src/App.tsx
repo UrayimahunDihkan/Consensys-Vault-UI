@@ -1,13 +1,13 @@
 // src/App.tsx
-import { useAccount, useConnect, useDisconnect, useBalance, useChainId, useReadContracts } from 'wagmi'
-import { formatUnits } from 'viem'
+import { useAccount, useConnect, useDisconnect, useBalance, useChainId, useReadContracts, usePublicClient } from 'wagmi'
+import { formatUnits, isAddress } from 'viem'
 import { useState } from 'react'
 
-// 🔒 你的企业级智能钱包地址
+// 🔒 你的企业级智能钱包地址 (请确保地址正确)
 const SMART_WALLET_ADDRESS = '0xDE57aEDAC1B7425C1E5368E7E8A1FF1C891d9884'
 
-// 需要读取的加密货币列表 (Sepolia 测试网)
-const TOKENS = [
+// 默认内置代币 (Sepolia)
+const INITIAL_TOKENS = [
   {
     address: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', // Sepolia USDC
     symbol: 'USDC',
@@ -24,15 +24,31 @@ const TOKENS = [
 
 // ERC20 ABI
 const ERC20_ABI = [
-  { "inputs": [{ "name": "account", "type": "address" }], "name": "balanceOf", "outputs": [{ "type": "uint256" }], "stateMutability": "view", "type": "function" }
+  { "inputs": [{ "name": "account", "type": "address" }], "name": "balanceOf", "outputs": [{ "type": "uint256" }], "stateMutability": "view", "type": "function" },
+  { "inputs": [], "name": "symbol", "outputs": [{ "type": "string" }], "stateMutability": "view", "type": "function" },
+  { "inputs": [], "name": "decimals", "outputs": [{ "type": "uint8" }], "stateMutability": "view", "type": "function" },
 ] as const
 
+interface Token {
+  address: string
+  symbol: string
+  name: string
+  decimals: number
+}
+
 function App() {
-  // 仅使用连接状态，不使用用户的 EOA 地址
   const { isConnected, chain } = useAccount()
   const { connect, connectors, isPending } = useConnect()
   const { disconnect } = useDisconnect()
   const chainId = useChainId()
+  const publicClient = usePublicClient()
+
+  // 状态：代币列表 & 添加代币弹窗
+  const [tokens, setTokens] = useState<Token[]>(INITIAL_TOKENS)
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [newTokenAddress, setNewTokenAddress] = useState('')
+  const [isAdding, setIsAdding] = useState(false)
+  const [addError, setAddError] = useState('')
 
   // 1. 获取 Smart Wallet 的原生 ETH 余额
   const { data: ethBalance, isLoading: isEthLoading } = useBalance({
@@ -41,14 +57,14 @@ function App() {
   })
 
   // 2. 批量获取 Smart Wallet 的 ERC-20 代币余额
-  const { data: tokenBalances, isLoading: isTokensLoading } = useReadContracts({
-    contracts: TOKENS.map((token) => ({
+  const { data: tokenBalances, isLoading: isTokensLoading, refetch: refetchBalances } = useReadContracts({
+    contracts: tokens.map((token) => ({
       address: token.address as `0x${string}`,
       abi: ERC20_ABI,
       functionName: 'balanceOf',
       args: [SMART_WALLET_ADDRESS],
     })),
-    query: { enabled: isConnected },
+    query: { enabled: isConnected && tokens.length > 0 },
   })
 
   // 格式化地址
@@ -61,6 +77,48 @@ function App() {
   let formattedEth = '0.0000'
   if (ethBalance && ethBalance.value !== undefined) {
     formattedEth = parseFloat(formatUnits(ethBalance.value, 18)).toFixed(4)
+  }
+
+  // 处理添加自定义代币
+  const handleAddToken = async () => {
+    if (!isAddress(newTokenAddress) || !publicClient) {
+      setAddError('无效的合约地址')
+      return
+    }
+
+    // 检查是否已存在
+    if (tokens.find(t => t.address.toLowerCase() === newTokenAddress.toLowerCase())) {
+      setAddError('该代币已添加')
+      return
+    }
+
+    setIsAdding(true)
+    setAddError('')
+
+    try {
+      // 从链上读取 symbol 和 decimals
+      const [symbol, decimals] = await Promise.all([
+        publicClient.readContract({ address: newTokenAddress as `0x${string}`, abi: ERC20_ABI, functionName: 'symbol' }),
+        publicClient.readContract({ address: newTokenAddress as `0x${string}`, abi: ERC20_ABI, functionName: 'decimals' }),
+      ])
+
+      const newToken: Token = {
+        address: newTokenAddress,
+        symbol: symbol as string,
+        name: 'Custom Token',
+        decimals: Number(decimals),
+      }
+
+      setTokens([...tokens, newToken])
+      setNewTokenAddress('')
+      setIsAddModalOpen(false)
+      setTimeout(() => refetchBalances(), 500)
+    } catch (error) {
+      console.error(error)
+      setAddError('读取代币信息失败，请确认地址是否正确且在当前网络')
+    } finally {
+      setIsAdding(false)
+    }
   }
 
   return (
@@ -155,7 +213,7 @@ function App() {
                 </div>
 
                 {/* ERC-20 代币遍历列表 */}
-                {TOKENS.map((token, index) => {
+                {tokens.map((token, index) => {
                   const balanceData = tokenBalances?.[index]
                   const isError = balanceData?.status === 'failure'
                   
@@ -195,13 +253,16 @@ function App() {
               </div>
             </div>
 
-            {/* 操作按钮区 (仅供展示) */}
+            {/* 操作按钮区 */}
             <div className="pt-4 border-t border-white/10 grid grid-cols-2 gap-3">
               <button className="py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl transition-all shadow-[0_4px_15px_rgba(79,70,229,0.3)]">
                 Transfer Funds
               </button>
-              <button className="py-3 bg-white/10 hover:bg-white/20 text-white font-medium rounded-xl transition-all">
-                Manage Signers
+              <button 
+                onClick={() => setIsAddModalOpen(true)}
+                className="py-3 bg-white/10 hover:bg-white/20 text-white font-medium rounded-xl transition-all"
+              >
+                Add Custom Token
               </button>
             </div>
 
@@ -220,6 +281,41 @@ function App() {
           </div>
         )}
       </div>
+
+      {/* 添加自定义代币弹窗 */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#1e293b] border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-[fadeIn_0.2s_ease-out]">
+            <h3 className="text-lg font-bold text-white mb-2">Add Custom Token</h3>
+            <p className="text-xs text-gray-400 mb-4">输入你要监控的代币合约地址</p>
+            
+            <input
+              type="text"
+              value={newTokenAddress}
+              onChange={(e) => setNewTokenAddress(e.target.value)}
+              placeholder="0x..."
+              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 outline-none focus:border-indigo-500 transition-colors mb-2 font-mono"
+            />
+            {addError && <div className="text-rose-400 text-xs mb-4">{addError}</div>}
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setIsAddModalOpen(false)}
+                className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddToken}
+                disabled={isAdding || !newTokenAddress}
+                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-all"
+              >
+                {isAdding ? 'Adding...' : 'Add Token'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
