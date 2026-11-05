@@ -1,5 +1,6 @@
 // src/App.tsx
 import { useAccount, useConnect, useDisconnect, useBalance, useChainId } from 'wagmi'
+import { formatUnits } from 'viem'
 
 function App() {
   const { address, isConnected, chain } = useAccount()
@@ -8,10 +9,17 @@ function App() {
   const chainId = useChainId()
 
   // 获取当前地址的 ETH 余额
-  const { data: balance } = useBalance({
+  const { data: balance, isLoading: isBalanceLoading } = useBalance({
     address: address,
     query: { enabled: isConnected },
   })
+
+  // 手动格式化余额，避免 NaN
+  let displayBalance = '0.0000'
+  if (balance && balance.value !== undefined) {
+    const decimals = balance.decimals ?? 18
+    displayBalance = parseFloat(formatUnits(balance.value, decimals)).toFixed(4)
+  }
 
   // 地址截断展示：0x1234...abcd
   const formatAddress = (addr?: string) => {
@@ -64,11 +72,18 @@ function App() {
               
               <div className="flex justify-between items-center pt-4 border-t border-white/10">
                 <span className="text-gray-400 text-sm font-medium">Balance</span>
-                <span className="font-bold text-2xl text-white">
-                  {balance ? parseFloat(balance.formatted).toFixed(4) : '0.0000'} 
-                  <span className="text-sm text-gray-400 ml-1.5 font-normal">{balance?.symbol || 'ETH'}</span>
+                <span className="font-bold text-2xl text-white flex items-center gap-1.5">
+                  {isBalanceLoading ? (
+                    <span className="text-sm text-gray-400 font-normal animate-pulse">获取中...</span>
+                  ) : (
+                    <>
+                      {displayBalance}
+                      <span className="text-sm text-gray-400 font-normal">{balance?.symbol || 'ETH'}</span>
+                    </>
+                  )}
                 </span>
               </div>
+
             </div>
 
             {/* 断开按钮 */}
