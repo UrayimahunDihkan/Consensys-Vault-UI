@@ -1,129 +1,221 @@
 // src/App.tsx
-import { useAccount, useConnect, useDisconnect, useBalance, useChainId } from 'wagmi'
+import { useAccount, useConnect, useDisconnect, useBalance, useChainId, useReadContracts } from 'wagmi'
 import { formatUnits } from 'viem'
+import { useState } from 'react'
+
+// 🔒 你的企业级智能钱包地址
+const SMART_WALLET_ADDRESS = '0xDE57aEDAC1B7425C1E5368E7E8A1FF1C891d9884'
+
+// 需要读取的加密货币列表 (Sepolia 测试网)
+const TOKENS = [
+  {
+    address: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', // Sepolia USDC
+    symbol: 'USDC',
+    name: 'USD Coin',
+    decimals: 6,
+  },
+  {
+    address: '0x779877A7B0D9E8603169DdbD7836e478b4624789', // Sepolia LINK
+    symbol: 'LINK',
+    name: 'ChainLink Token',
+    decimals: 18,
+  }
+]
+
+// ERC20 ABI
+const ERC20_ABI = [
+  { "inputs": [{ "name": "account", "type": "address" }], "name": "balanceOf", "outputs": [{ "type": "uint256" }], "stateMutability": "view", "type": "function" }
+] as const
 
 function App() {
-  const { address, isConnected, chain } = useAccount()
+  // 仅使用连接状态，不使用用户的 EOA 地址
+  const { isConnected, chain } = useAccount()
   const { connect, connectors, isPending } = useConnect()
   const { disconnect } = useDisconnect()
   const chainId = useChainId()
 
-  // 获取当前地址的 ETH 余额
-  const { data: balance, isLoading: isBalanceLoading } = useBalance({
-    address: address,
+  // 1. 获取 Smart Wallet 的原生 ETH 余额
+  const { data: ethBalance, isLoading: isEthLoading } = useBalance({
+    address: SMART_WALLET_ADDRESS,
     query: { enabled: isConnected },
   })
 
-  // 手动格式化余额，避免 NaN
-  let displayBalance = '0.0000'
-  if (balance && balance.value !== undefined) {
-    const decimals = balance.decimals ?? 18
-    displayBalance = parseFloat(formatUnits(balance.value, decimals)).toFixed(4)
-  }
+  // 2. 批量获取 Smart Wallet 的 ERC-20 代币余额
+  const { data: tokenBalances, isLoading: isTokensLoading } = useReadContracts({
+    contracts: TOKENS.map((token) => ({
+      address: token.address as `0x${string}`,
+      abi: ERC20_ABI,
+      functionName: 'balanceOf',
+      args: [SMART_WALLET_ADDRESS],
+    })),
+    query: { enabled: isConnected },
+  })
 
-  // 地址截断展示：0x1234...abcd
+  // 格式化地址
   const formatAddress = (addr?: string) => {
     if (!addr) return ''
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`
   }
 
+  // 手动格式化 ETH 余额
+  let formattedEth = '0.0000'
+  if (ethBalance && ethBalance.value !== undefined) {
+    formattedEth = parseFloat(formatUnits(ethBalance.value, 18)).toFixed(4)
+  }
+
   return (
-    // 页面底层渐变背景（在 index.css 中已定义）
-    <div className="flex items-center justify-center min-h-screen">
+    <div className="flex items-center justify-center min-h-screen p-4 relative">
       
-      {/* 核心毛玻璃卡片 */}
-      <div className="w-full max-w-md p-8 bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[2rem] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] transition-all duration-300">
+      {/* 企业级控制台卡片容器 */}
+      <div className="w-full max-w-2xl bg-[#0f172a]/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl transition-all duration-300 overflow-hidden">
         
-        {/* 头部 Logo 与标题 */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 mb-4 shadow-[0_0_15px_rgba(79,70,229,0.5)]">
-            {/* 闪电 SVG 图标 */}
-            <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-2 tracking-wide">Web3 Connect</h1>
-          <p className="text-gray-400 text-sm">Connect your wallet to continue</p>
-        </div>
-
-        {/* 状态区分 */}
-        {isConnected ? (
-          <div className="space-y-4 animate-[fadeIn_0.3s_ease-out]">
-            {/* 信息面板 */}
-            <div className="p-5 bg-black/40 rounded-xl border border-white/5 space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-400 text-sm font-medium">Account</span>
-                <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg">
-                  {/* 绿色呼吸灯 */}
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                  </span>
-                  <span className="font-mono text-sm text-gray-200">{formatAddress(address)}</span>
-                </div>
-              </div>
-              
-              <div className="flex justify-between items-center">
-                <span className="text-gray-400 text-sm font-medium">Network</span>
-                <span className="px-2.5 py-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-md text-xs font-semibold">
-                  {chain?.name || `Chain ${chainId}`}
-                </span>
-              </div>
-              
-              <div className="flex justify-between items-center pt-4 border-t border-white/10">
-                <span className="text-gray-400 text-sm font-medium">Balance</span>
-                <span className="font-bold text-2xl text-white flex items-center gap-1.5">
-                  {isBalanceLoading ? (
-                    <span className="text-sm text-gray-400 font-normal animate-pulse">获取中...</span>
-                  ) : (
-                    <>
-                      {displayBalance}
-                      <span className="text-sm text-gray-400 font-normal">{balance?.symbol || 'ETH'}</span>
-                    </>
-                  )}
-                </span>
-              </div>
-
+        {/* 顶部导航栏 */}
+        <div className="flex justify-between items-center p-6 border-b border-white/10 bg-white/5">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30">
+              <svg className="w-6 h-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
             </div>
+            <div>
+              <h1 className="text-xl font-bold text-white tracking-wide">Enterprise Vault</h1>
+              <p className="text-xs text-indigo-300">Smart Account Dashboard</p>
+            </div>
+          </div>
 
-            {/* 断开按钮 */}
+          {isConnected ? (
             <button
               onClick={() => disconnect()}
-              className="w-full py-3.5 bg-white/5 hover:bg-rose-500/10 text-gray-300 hover:text-rose-400 font-medium rounded-xl border border-white/10 hover:border-rose-500/30 transition-all duration-200 active:scale-[0.98]"
+              className="px-4 py-2 text-sm bg-white/5 hover:bg-rose-500/10 text-gray-300 hover:text-rose-400 border border-white/10 rounded-lg transition-all"
             >
-              Disconnect Wallet
+              Disconnect
             </button>
+          ) : (
+            <button
+              onClick={() => connect({ connector: connectors[0] })}
+              disabled={isPending}
+              className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-all shadow-[0_0_15px_rgba(79,70,229,0.4)]"
+            >
+              {isPending ? 'Connecting...' : 'Connect Wallet'}
+            </button>
+          )}
+        </div>
+
+        {isConnected ? (
+          <div className="p-6 space-y-6 animate-[fadeIn_0.3s_ease-out]">
+            
+            {/* Smart Wallet 账户信息栏 */}
+            <div className="flex flex-wrap justify-between items-center gap-4 bg-black/40 p-4 rounded-xl border border-white/5">
+              <div>
+                <div className="text-xs text-gray-400 mb-1">Smart Account Address</div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm text-gray-200">{SMART_WALLET_ADDRESS}</span>
+                  <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-300 text-[10px] font-bold rounded uppercase">
+                    {chain?.name || `Chain ${chainId}`}
+                  </span>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-gray-400 mb-1">Status</div>
+                <div className="flex items-center gap-2 justify-end">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span className="text-sm text-emerald-400 font-medium">Active</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 资产列表区域 */}
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold text-white">Vault Portfolio</h2>
+                <span className="text-xs text-gray-400">All Assets</span>
+              </div>
+
+              <div className="space-y-2">
+                {/* 原生 ETH 行 */}
+                <div className="flex justify-between items-center p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-colors border border-transparent hover:border-white/10 cursor-pointer">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-xl">
+                      💎
+                    </div>
+                    <div>
+                      <div className="font-bold text-white">Ethereum</div>
+                      <div className="text-xs text-gray-400">Native Currency</div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-white">
+                      {isEthLoading ? '...' : formattedEth}
+                    </div>
+                    <div className="text-xs text-gray-400">ETH</div>
+                  </div>
+                </div>
+
+                {/* ERC-20 代币遍历列表 */}
+                {TOKENS.map((token, index) => {
+                  const balanceData = tokenBalances?.[index]
+                  const isError = balanceData?.status === 'failure'
+                  
+                  let formattedBalance = '0.0000'
+                  if (balanceData?.status === 'success') {
+                    formattedBalance = parseFloat(formatUnits(balanceData.result as bigint, token.decimals)).toFixed(4)
+                  }
+
+                  return (
+                    <div key={token.address} className="flex justify-between items-center p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-colors border border-transparent hover:border-white/10 cursor-pointer">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-indigo-900/50 border border-indigo-500/30 flex items-center justify-center font-bold text-indigo-300 text-sm">
+                          {token.symbol.substring(0, 2)}
+                        </div>
+                        <div>
+                          <div className="font-bold text-white">{token.symbol}</div>
+                          <div className="text-xs text-gray-400 font-mono" title={token.address}>
+                            {formatAddress(token.address)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-bold text-white">
+                          {isTokensLoading ? (
+                            <span className="animate-pulse text-gray-500">加载中</span>
+                          ) : isError ? (
+                            <span className="text-rose-500 text-xs">读取失败</span>
+                          ) : (
+                            formattedBalance
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-400">{token.symbol}</div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* 操作按钮区 (仅供展示) */}
+            <div className="pt-4 border-t border-white/10 grid grid-cols-2 gap-3">
+              <button className="py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl transition-all shadow-[0_4px_15px_rgba(79,70,229,0.3)]">
+                Transfer Funds
+              </button>
+              <button className="py-3 bg-white/10 hover:bg-white/20 text-white font-medium rounded-xl transition-all">
+                Manage Signers
+              </button>
+            </div>
+
           </div>
         ) : (
-          <div className="space-y-4">
-            {/* 连接钱包按钮 */}
-            {connectors.map((connector) => (
-              <button
-                key={connector.uid}
-                onClick={() => connect({ connector })}
-                disabled={isPending}
-                className="w-full flex items-center justify-center gap-3 py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-all shadow-[0_0_20px_rgba(79,70,229,0.4)] hover:shadow-[0_0_25px_rgba(79,70,229,0.6)] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
-              >
-                {isPending ? (
-                  // Loading 动画
-                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                ) : (
-                  // 钱包图标
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path>
-                  </svg>
-                )}
-                
-                {isPending ? 'Connecting...' : `Connect Wallet`}
-
-              </button>
-            ))}
-            
-            <p className="text-center text-xs text-gray-500 mt-6">
-              By connecting, you agree to our Terms of Service.
+          <div className="p-12 flex flex-col items-center justify-center text-center">
+            <div className="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mb-6">
+              <svg className="w-10 h-10 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-white mb-2">Access Denied</h2>
+            <p className="text-gray-400 mb-6 max-w-sm">
+              Please connect your authorized wallet to access the enterprise smart account vault.
             </p>
           </div>
         )}
