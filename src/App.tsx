@@ -1,24 +1,25 @@
 // src/App.tsx
-import { useAccount, useConnect, useDisconnect, useBalance, useChainId, useReadContracts, usePublicClient } from 'wagmi'
+import { useAccount, useConnect, useDisconnect, useBalance, useChainId, useReadContracts, usePublicClient, useReadContract } from 'wagmi'
 import { formatUnits, isAddress } from 'viem'
 import { useState } from 'react'
+import { SmartWalletABI } from './abi/SmartWalletABI' 
 
-// 🔒 你的组织多签金库地址
-const SMART_WALLET_ADDRESS = '0x63775393812DB336149dC9C37C5A36C485f94342'
+// 🔒 Rootstock 上的合约地址
+const SMART_WALLET_ADDRESS = '0x327400bB00E4A11e3Ec64f35c2E5550163c30b41'
 
-// 默认内置代币 (Sepolia)
+// 默认内置代币 (Rootstock Mainnet)
 const INITIAL_TOKENS = [
   {
-    address: '0x3a2eB9b7675e39cAb643f202632aed5Ce33EC662', // Sepolia tBTC
-    symbol: 'tBTC',
-    name: 'BITCOIN Token',
-    decimals: 0,
+    address: '0xe700691dA7b9851F2F35f8b8182c69c53CcaD9Db', // Rootstock DOC (Dollar on Chain)
+    symbol: 'DOC',
+    name: 'Dollar on Chain',
+    decimals: 18,
   },
   {
-    address: '0x779877A7B0D9E8603169DdbD7836e478b4624789', // Sepolia LINK
-    symbol: 'LINK',
-    name: 'ChainLink Token',
-    decimals: 18,
+    address: '0x5a767e7A1A42e5B55A6409024D09D6417AC47B2F', // Rootstock USDT (如有需要可换成其他主网币)
+    symbol: 'USDT',
+    name: 'Tether USD',
+    decimals: 6,
   }
 ]
 
@@ -50,13 +51,21 @@ function App() {
   const [isAdding, setIsAdding] = useState(false)
   const [addError, setAddError] = useState('')
 
-  // 1. 获取 Vault 的原生 ETH 余额
-  const { data: ethBalance, isLoading: isEthLoading } = useBalance({
+  // 1. 获取 Vault 的 orgName (组织名字)
+  const { data: orgName, isLoading: isOrgNameLoading } = useReadContract({
+    address: SMART_WALLET_ADDRESS,
+    abi: SmartWalletABI,
+    functionName: 'orgName',
+    query: { enabled: isConnected },
+  });
+
+  // 2. 获取 Vault 的原生 RBTC 余额
+  const { data: nativeBalance, isLoading: isNativeLoading } = useBalance({
     address: SMART_WALLET_ADDRESS,
     query: { enabled: isConnected },
   })
 
-  // 2. 批量获取 Vault 的 ERC-20 代币余额
+  // 3. 批量获取 Vault 的 ERC-20 代币余额
   const { data: tokenBalances, isLoading: isTokensLoading, refetch: refetchBalances } = useReadContracts({
     contracts: tokens.map((token) => ({
       address: token.address as `0x${string}`,
@@ -73,10 +82,10 @@ function App() {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`
   }
 
-  // 手动格式化 ETH 余额
-  let formattedEth = '0.0000'
-  if (ethBalance && ethBalance.value !== undefined) {
-    formattedEth = parseFloat(formatUnits(ethBalance.value, 18)).toFixed(4)
+  // 手动格式化 RBTC 余额 (Rootstock 原生代币是 18 位精度)
+  let formattedNative = '0.0000'
+  if (nativeBalance && nativeBalance.value !== undefined) {
+    formattedNative = parseFloat(formatUnits(nativeBalance.value, nativeBalance.decimals)).toFixed(4)
   }
 
   // 处理添加自定义代币
@@ -128,21 +137,28 @@ function App() {
         {/* 顶部导航栏 */}
         <div className="flex justify-between items-center p-6 border-b border-[#2a2a2a] bg-[#1a1a1a]/50">
           <div className="flex items-center gap-4">
-            <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.2)]">
-              {/* 共识图标 (Network / Nodes) */}
-              <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
+            <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-orange-500/10 border border-orange-500/20 shadow-[0_0_15px_rgba(249,115,22,0.2)]">
+              {/* 改成比特币风格图标 */}
+              <svg className="w-6 h-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
             <div>
               <h1 className="text-xl font-bold text-white tracking-wide flex items-center gap-2">
-                Consensys Vault
-                <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-300 text-[10px] font-bold rounded uppercase tracking-wider">
-                 ئۇيغۇر
-                <span> DAO</span>
+                Rootstock Vault
+                {/* ✅ 动态读取 orgName */}
+                <span 
+                  className="px-1.5 py-0.5 bg-orange-500/20 text-orange-300 text-[10px] font-bold rounded uppercase tracking-wider max-w-[150px] truncate block"
+                  title={orgName || "Loading..."}
+                >
+                  {isOrgNameLoading ? (
+                    <span className="animate-pulse bg-orange-400/50 w-8 h-3 inline-block rounded"></span>
+                  ) : (
+                    orgName || "Unknown DAO"
+                  )}
                 </span>
               </h1>
-              <p className="text-xs text-gray-400 mt-1">Governed by consensus | Secured by code.</p>
+              <p className="text-xs text-gray-400 mt-1">Governed by consensus | Secured by Bitcoin.</p>
             </div>
           </div>
 
@@ -157,7 +173,7 @@ function App() {
             <button
               onClick={() => connect({ connector: connectors[0] })}
               disabled={isPending}
-              className="px-5 py-2 text-sm font-semibold bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-all shadow-[0_0_15px_rgba(147,51,234,0.4)]"
+              className="px-5 py-2 text-sm font-semibold bg-orange-600 hover:bg-orange-500 text-white rounded-lg transition-all shadow-[0_0_15px_rgba(249,115,22,0.4)]"
             >
               {isPending ? 'Authenticating...' : 'Connect Signer'}
             </button>
@@ -198,22 +214,22 @@ function App() {
               </div>
 
               <div className="space-y-2">
-                {/* 原生 ETH 行 */}
+                {/* 原生 RBTC 行 */}
                 <div className="flex justify-between items-center p-4 bg-[#1a1a1a]/50 hover:bg-[#222] rounded-xl transition-colors border border-[#2a2a2a] hover:border-[#444] cursor-pointer">
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-[#2a2a2a] flex items-center justify-center text-xl shadow-inner">
-                      💎
+                    <div className="w-10 h-10 rounded-full bg-[#2a2a2a] flex items-center justify-center text-xl shadow-inner text-orange-400">
+                      ₿
                     </div>
                     <div>
-                      <div className="font-bold text-white">Ethereum</div>
+                      <div className="font-bold text-white">Rootstock</div>
                       <div className="text-xs text-gray-400">Native Currency</div>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="font-bold text-white">
-                      {isEthLoading ? '...' : formattedEth}
+                      {isNativeLoading ? '...' : formattedNative}
                     </div>
-                    <div className="text-xs text-gray-400">ETH</div>
+                    <div className="text-xs text-gray-400">RBTC</div>
                   </div>
                 </div>
 
@@ -230,7 +246,7 @@ function App() {
                   return (
                     <div key={token.address} className="flex justify-between items-center p-4 bg-[#1a1a1a]/50 hover:bg-[#222] rounded-xl transition-colors border border-[#2a2a2a] hover:border-[#444] cursor-pointer">
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-full bg-purple-950/40 border border-purple-500/20 flex items-center justify-center font-bold text-purple-300 text-sm">
+                        <div className="w-10 h-10 rounded-full bg-orange-950/40 border border-orange-500/20 flex items-center justify-center font-bold text-orange-300 text-sm">
                           {token.symbol.substring(0, 2)}
                         </div>
                         <div>
@@ -260,7 +276,7 @@ function App() {
 
             {/* 操作按钮区 */}
             <div className="pt-4 border-t border-[#2a2a2a] grid grid-cols-2 gap-3">
-              <button className="py-3 bg-purple-600 hover:bg-purple-500 text-white font-medium rounded-xl transition-all shadow-[0_4px_15px_rgba(147,51,234,0.3)]">
+              <button className="py-3 bg-orange-600 hover:bg-orange-500 text-white font-medium rounded-xl transition-all shadow-[0_4px_15px_rgba(249,115,22,0.3)]">
                 Propose Transfer
               </button>
               <button 
@@ -281,7 +297,7 @@ function App() {
             </div>
             <h2 className="text-xl font-bold text-white mb-2">Vault Locked</h2>
             <p className="text-gray-400 mb-6 max-w-sm text-sm">
-              Connect your authorized signer wallet to access the Consensys Vault.
+              Connect your authorized signer wallet to access the Rootstock Vault.
             </p>
           </div>
         )}
@@ -299,7 +315,7 @@ function App() {
               value={newTokenAddress}
               onChange={(e) => setNewTokenAddress(e.target.value)}
               placeholder="0x..."
-              className="w-full bg-[#0a0a0a] border border-[#333] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 outline-none focus:border-purple-500 transition-colors mb-2 font-mono"
+              className="w-full bg-[#0a0a0a] border border-[#333] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 outline-none focus:border-orange-500 transition-colors mb-2 font-mono"
             />
             {addError && <div className="text-rose-400 text-xs mb-4">{addError}</div>}
 
@@ -313,7 +329,7 @@ function App() {
               <button
                 onClick={handleAddToken}
                 disabled={isAdding || !newTokenAddress}
-                className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-all"
+                className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-all"
               >
                 {isAdding ? 'Verifying...' : 'Add Asset'}
               </button>
