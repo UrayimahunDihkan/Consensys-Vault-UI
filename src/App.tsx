@@ -1,7 +1,7 @@
 // src/App.tsx
 import { useAccount, useConnect, useDisconnect, useBalance, useChainId, useReadContracts, usePublicClient, useReadContract } from 'wagmi'
 import { formatUnits, isAddress } from 'viem'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { SmartWalletABI } from './abi/SmartWalletABI' 
 
 // 🔒 Rootstock 上的合约地址
@@ -10,13 +10,13 @@ const SMART_WALLET_ADDRESS = '0x327400bB00E4A11e3Ec64f35c2E5550163c30b41'
 // 默认内置代币 (Rootstock Mainnet)
 const INITIAL_TOKENS = [
   {
-    address: '0xe700691dA7b9851F2F35f8b8182c69c53CcaD9Db', // Rootstock DOC (Dollar on Chain)
+    address: '0xe700691dA7b9851F2F35f8b8182c69c53CcaD9Db', // Rootstock DOC
     symbol: 'DOC',
     name: 'Dollar on Chain',
     decimals: 18,
   },
   {
-    address: '0x5a767e7A1A42e5B55A6409024D09D6417AC47B2F', // Rootstock USDT (如有需要可换成其他主网币)
+    address: '0x5a767e7A1A42e5B55A6409024D09D6417AC47B2F', // Rootstock USDT
     symbol: 'USDT',
     name: 'Tether USD',
     decimals: 6,
@@ -51,6 +51,9 @@ function App() {
   const [isAdding, setIsAdding] = useState(false)
   const [addError, setAddError] = useState('')
 
+  // 👇 新增：用于显示“已复制”提示的状态
+  const [copied, setCopied] = useState(false)
+
   // 1. 获取 Vault 的 orgName (组织名字)
   const { data: orgName, isLoading: isOrgNameLoading } = useReadContract({
     address: SMART_WALLET_ADDRESS,
@@ -80,6 +83,24 @@ function App() {
   const formatAddress = (addr?: string) => {
     if (!addr) return ''
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+  }
+
+  // 格式化长地址（首 6 尾 4，中间用 ... 代替）
+  const formatLongAddress = (addr: string) => {
+    if (!addr) return ''
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+  }
+
+  // 👇 新增：处理复制逻辑
+  const handleCopyAddress = async () => {
+    try {
+      await navigator.clipboard.writeText(SMART_WALLET_ADDRESS)
+      setCopied(true)
+      // 2秒后清除“已复制”状态
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy', err)
+    }
   }
 
   // 手动格式化 RBTC 余额 (Rootstock 原生代币是 18 位精度)
@@ -138,7 +159,6 @@ function App() {
         <div className="flex justify-between items-center p-6 border-b border-[#2a2a2a] bg-[#1a1a1a]/50">
           <div className="flex items-center gap-4">
             <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-orange-500/10 border border-orange-500/20 shadow-[0_0_15px_rgba(249,115,22,0.2)]">
-              {/* 改成比特币风格图标 */}
               <svg className="w-6 h-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
@@ -146,7 +166,6 @@ function App() {
             <div>
               <h1 className="text-xl font-bold text-white tracking-wide flex items-center gap-2">
                 Rootstock Vault
-                {/* ✅ 动态读取 orgName */}
                 <span 
                   className="px-1.5 py-0.5 bg-orange-500/20 text-orange-300 text-[10px] font-bold rounded uppercase tracking-wider max-w-[150px] truncate block"
                   title={orgName || "Loading..."}
@@ -188,7 +207,27 @@ function App() {
               <div>
                 <div className="text-xs text-gray-500 mb-1">Vault Address</div>
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-sm text-gray-200">{SMART_WALLET_ADDRESS}</span>
+                  
+                  {/* 👇 这里替换成了可点击复制的长地址省略组件 */}
+                  <div 
+                    className="relative flex items-center gap-2 cursor-pointer group"
+                    onClick={handleCopyAddress}
+                    title="Click to copy"
+                  >
+                    <span className="font-mono text-sm text-gray-200 group-hover:text-orange-400 transition-colors">
+                      {formatLongAddress(SMART_WALLET_ADDRESS)}
+                    </span>
+                    <svg className="w-4 h-4 text-gray-500 group-hover:text-orange-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    {/* 悬浮提示 */}
+                    {copied && (
+                      <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-orange-500 text-white text-[10px] px-2 py-1 rounded shadow-lg animate-[fadeIn_0.2s_ease-out]">
+                        Copied!
+                      </span>
+                    )}
+                  </div>
+
                   <span className="px-2 py-0.5 bg-[#222] text-gray-300 border border-[#333] text-[10px] font-bold rounded uppercase">
                     {chain?.name || `Chain ${chainId}`}
                   </span>
