@@ -4,15 +4,15 @@ import { formatUnits, isAddress } from 'viem'
 import { useState } from 'react'
 
 // 🔒 你的组织多签金库地址
-const SMART_WALLET_ADDRESS = '0xDE57aEDAC1B7425C1E5368E7E8A1FF1C891d9884'
+const SMART_WALLET_ADDRESS = '0x63775393812DB336149dC9C37C5A36C485f94342'
 
 // 默认内置代币 (Sepolia)
 const INITIAL_TOKENS = [
   {
-    address: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', // Sepolia USDC
-    symbol: 'USDC',
-    name: 'USD Coin',
-    decimals: 6,
+    address: '0x3a2eB9b7675e39cAb643f202632aed5Ce33EC662', // Sepolia tBTC
+    symbol: 'tBTC',
+    name: 'BITCOIN Token',
+    decimals: 0,
   },
   {
     address: '0x779877A7B0D9E8603169DdbD7836e478b4624789', // Sepolia LINK
