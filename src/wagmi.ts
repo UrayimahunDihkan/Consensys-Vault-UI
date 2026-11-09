@@ -8,10 +8,10 @@ import { defineChain } from 'viem'
 const rootstock = defineChain({
   id: 31, 
   name: 'Rootstock',
-  nativeCurrency: { name: 'Rootstock Bitcoin', symbol: 'RBTC', decimals: 18 },
+  nativeCurrency: { name: 'Rootstock Bitcoin', symbol: 'tRBTC', decimals: 18 },
   rpcUrls: {
     default: {
-      http: ['https://public-node.testnet.rsk.co'],
+      http: [import.meta.env.VITE_ROOTSTOCK_RPC_URL as string],
     },
   },
   // blockExplorers: {
@@ -27,8 +27,7 @@ export const config = createConfig({
   ],
   transports: {
     [mainnet.id]: http(),
-    [sepolia.id]: http('https://eth-sepolia.g.alchemy.com/v2/Ho9YPp3W8pLUprghQjFtK'),
-    // 3. 给 rootstock 配置 RPC 传输
-    [rootstock.id]: http('https://rpc.testnet.rootstock.io/OOjwiraKsMFZ4Bjzhq3VHlpLg1ayVb-T'),
+    [sepolia.id]: http(),
+    [rootstock.id]: http(),
   },
 })

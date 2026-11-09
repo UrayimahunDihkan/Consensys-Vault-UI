@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { SmartWalletABI } from './abi/SmartWalletABI' 
 
 // 🔒 Rootstock 上的合约地址
-const SMART_WALLET_ADDRESS = '0x327400bB00E4A11e3Ec64f35c2E5550163c30b41'
+const SMART_WALLET_ADDRESS = import.meta.env.VITE_SMART_WALLET_ADDRESS as `0x${string}`
 
 // 默认内置代币 (Rootstock Mainnet)
 const INITIAL_TOKENS = [
