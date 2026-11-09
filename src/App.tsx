@@ -1,7 +1,7 @@
 // src/App.tsx
 import { useAccount, useConnect, useDisconnect, useBalance, useChainId, useReadContracts, usePublicClient, useReadContract } from 'wagmi'
 import { formatUnits, isAddress } from 'viem'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { SmartWalletABI } from './abi/SmartWalletABI' 
 
 // 🔒 Rootstock 上的合约地址
@@ -279,7 +279,7 @@ function App() {
                   
                   let formattedBalance = '0.0000'
                   if (balanceData?.status === 'success') {
-                    formattedBalance = parseFloat(formatUnits(balanceData.result as bigint, token.decimals)).toFixed(4)
+                    formattedBalance = parseFloat(formatUnits(BigInt(balanceData.result) , token.decimals)).toFixed(4)
                   }
 
                   return (
