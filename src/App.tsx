@@ -10,12 +10,6 @@ const SMART_WALLET_ADDRESS = import.meta.env.VITE_SMART_WALLET_ADDRESS as `0x${s
 // 默认内置代币 (Rootstock Mainnet)
 const INITIAL_TOKENS = [
   {
-    address: '0xe700691dA7b9851F2F35f8b8182c69c53CcaD9Db', // Rootstock DOC
-    symbol: 'DOC',
-    name: 'Dollar on Chain',
-    decimals: 18,
-  },
-  {
     address: '0x5a767e7A1A42e5B55A6409024D09D6417AC47B2F', // Rootstock USDT
     symbol: 'USDT',
     name: 'Tether USD',
@@ -165,7 +159,7 @@ function App() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-white tracking-wide flex items-center gap-2">
-                Rootstock Vault
+                Consensys Vault
                 <span 
                   className="px-1.5 py-0.5 bg-orange-500/20 text-orange-300 text-[10px] font-bold rounded uppercase tracking-wider max-w-[150px] truncate block"
                   title={orgName || "Loading..."}
@@ -177,7 +171,7 @@ function App() {
                   )}
                 </span>
               </h1>
-              <p className="text-xs text-gray-400 mt-1">Governed by consensus | Secured by Bitcoin.</p>
+              <p className="text-xs text-gray-400 mt-1">Governed by consensus | Secured by code.</p>
             </div>
           </div>
 
