@@ -1,7 +1,6 @@
 // src/components/ProposalList.tsx
 import { useMemo } from 'react'
 
-// 👇 这些类型后面可以移到 types.ts，先放这里也行
 export type ProposalType = 'changeOrgName' | 'transfer' | 'addMember'
 
 export interface Proposal {
@@ -13,11 +12,13 @@ export interface Proposal {
   infos: readonly string[]
   signatures: readonly `0x${string}`[]
   signComplete: boolean
+  enumValue: number
 }
 
 interface ProposalListProps {
   proposals: Proposal[]
   formatAddress: (addr?: string) => string
+  onSign: (proposal: Proposal) => void 
 }
 
 const TYPE_LABEL: Record<ProposalType, string> = {
@@ -26,8 +27,7 @@ const TYPE_LABEL: Record<ProposalType, string> = {
   addMember: 'MEMBER',
 }
 
-export function ProposalList({ proposals, formatAddress }: ProposalListProps) {
-  // 用 useMemo 包一下，避免每次父组件渲染都重新计算
+export function ProposalList({ proposals, formatAddress, onSign }: ProposalListProps) {
   const rendered = useMemo(() => proposals, [proposals])
 
   if (rendered.length === 0) {
@@ -64,7 +64,6 @@ export function ProposalList({ proposals, formatAddress }: ProposalListProps) {
             {prop.description}
           </p>
 
-          {/* SignatureInfo 详情 */}
           <div className="space-y-1.5 text-[10px] text-gray-700 mb-3">
             <div className="flex justify-between gap-2">
               <span className="text-gray-500">Applicant</span>
@@ -118,6 +117,19 @@ export function ProposalList({ proposals, formatAddress }: ProposalListProps) {
               {prop.signComplete ? 'DONE' : 'On-chain'}
             </span>
           </div>
+
+        
+          {prop.type === 'changeOrgName' && !prop.signComplete && (
+            <button
+              onClick={() => onSign(prop)}
+              className="mt-3 w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold rounded-md transition-all shadow-sm flex items-center justify-center gap-1"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+              Sign
+            </button>
+          )}
         </div>
       ))}
     </div>

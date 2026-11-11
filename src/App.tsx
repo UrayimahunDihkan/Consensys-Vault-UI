@@ -7,6 +7,8 @@ import { ProposalSignABI } from './abi/ProposalSignABI'
 import { ProposalList } from './components/ProposalList'
 import type { Proposal, ProposalType } from './components/ProposalList'
 import { AddTokenModal } from './components/AddTokenModal'
+import { TopActions } from './components/TopActions'
+import { SignConfirmModal } from './components/SignConfirmModal'
 
 // 🔒 Rootstock 上的合约地址
 const SMART_WALLET_ADDRESS = import.meta.env.VITE_SMART_WALLET_ADDRESS as `0x${string}`
@@ -36,9 +38,6 @@ interface Token {
   decimals: number
 }
 
-// 👇 统一 proposal 类型
-// type ProposalType = 'changeOrgName' | 'transfer' | 'addMember'
-
 // 👇 链上 enum 值 -> 前端 type
 const ENUM_TO_TYPE: Record<number, ProposalType> = {
   0: 'changeOrgName',
@@ -62,7 +61,7 @@ interface CoinOption {
 }
 
 function App() {
-  const { isConnected, chain } = useAccount()
+  const { isConnected, chain, address } = useAccount()
   const { connect, connectors, isPending } = useConnect()
   const { disconnect } = useDisconnect()
   const chainId = useChainId()
@@ -85,6 +84,11 @@ function App() {
   const [transferValue, setTransferValue] = useState('')
   const [selectedCoinKey, setSelectedCoinKey] = useState<string>('native')
   const [memberAccount, setMemberAccount] = useState('')
+
+  // 👇 签名确认弹窗状态
+  const [signTarget, setSignTarget] = useState<Proposal | null>(null)
+  const [isSigning, setIsSigning] = useState(false)
+  const [signError, setSignError] = useState('')
 
   // 币种选项：原生 RBTC + 已追踪 ERC20
   const coinOptions: CoinOption[] = useMemo(() => [
@@ -131,9 +135,9 @@ function App() {
   const proposals: Proposal[] = useMemo(() => {
     if (!onChainProposals) return []
     return onChainProposals.map((p, idx) => {
-      const type = ENUM_TO_TYPE[Number(p.proposal)] ?? 'changeOrgName'
+      const enumValue = Number(p.proposal)
+      const type = ENUM_TO_TYPE[enumValue] ?? 'changeOrgName'
       const meta = TYPE_META[type]
-      // 对 org name proposal，把新名字显示到 description 里，更直观
       const desc = type === 'changeOrgName' && p.infos[0]
         ? `→ New name: "${p.infos[0]}"`
         : meta.description
@@ -146,9 +150,51 @@ function App() {
         infos: p.infos,
         signatures: p.signatures,
         signComplete: p.signComplete,
+        enumValue,
       }
     })
   }, [onChainProposals])
+
+  // 👇 签名确认弹窗操作（放在 refetchProposals 之后，避免 TDZ）
+  const openSignConfirm = (proposal: Proposal) => {
+    setSignTarget(proposal)
+    setSignError('')
+    setIsSigning(false)
+  }
+
+  const closeSignConfirm = () => {
+    setSignTarget(null)
+    setSignError('')
+    setIsSigning(false)
+  }
+
+  const confirmSign = async () => {
+    if (!signTarget) return
+
+    setIsSigning(true)
+    setSignError('')
+
+    try {
+      const hash = await writeContractAsync({
+        address: PROPOSAL_SIGN_ADDRESS,
+        abi: ProposalSignABI,
+        functionName: 'signProposal',
+        args: [signTarget.enumValue],
+      })
+
+      if (publicClient) {
+        await publicClient.waitForTransactionReceipt({ hash })
+      }
+
+      await refetchProposals()
+      closeSignConfirm()
+    } catch (e: any) {
+      console.error(e)
+      setSignError(e?.shortMessage || e?.message || 'Sign transaction failed')
+    } finally {
+      setIsSigning(false)
+    }
+  }
 
   const formatAddress = (addr?: string) => {
     if (!addr) return ''
@@ -173,21 +219,21 @@ function App() {
     formattedNative = parseFloat(formatUnits(nativeBalance.value, nativeBalance.decimals)).toFixed(4)
   }
 
-  const handleAddToken = async (address: string) => {
-    if (!isAddress(address) || !publicClient) {
+  const handleAddToken = async (tokenAddress: string) => {
+    if (!isAddress(tokenAddress) || !publicClient) {
       throw new Error('Invalid address')
     }
-    if (tokens.find(t => t.address.toLowerCase() === address.toLowerCase())) {
+    if (tokens.find(t => t.address.toLowerCase() === tokenAddress.toLowerCase())) {
       throw new Error('Token already tracked')
     }
 
     const [symbol, decimals] = await Promise.all([
-      publicClient.readContract({ address: address as `0x${string}`, abi: ERC20_ABI, functionName: 'symbol' }),
-      publicClient.readContract({ address: address as `0x${string}`, abi: ERC20_ABI, functionName: 'decimals' }),
+      publicClient.readContract({ address: tokenAddress as `0x${string}`, abi: ERC20_ABI, functionName: 'symbol' }),
+      publicClient.readContract({ address: tokenAddress as `0x${string}`, abi: ERC20_ABI, functionName: 'decimals' }),
     ])
 
     const newToken: Token = {
-      address,
+      address: tokenAddress,
       symbol: symbol as string,
       name: 'Custom Asset',
       decimals: Number(decimals),
@@ -247,7 +293,6 @@ function App() {
           await publicClient.waitForTransactionReceipt({ hash })
         }
 
-        // 👇 从链上重新拉取，不用本地插
         await refetchProposals()
 
         setIsProposalModalOpen(false)
@@ -279,42 +324,15 @@ function App() {
   return (
     <div className="flex flex-col items-center min-h-screen p-4 relative gap-8">
       
-      {/* 顶部操作栏 */}
-      {isConnected && (
-        <div className="w-full max-w-4xl flex items-center justify-end gap-3 bg-[#1a1a1a]/80 p-4 rounded-2xl border border-[#2a2a2a] shadow-lg">
-          <span className="text-sm text-gray-400 mr-auto pl-2">Proposals:</span>
-          <button 
-            onClick={() => openProposalModal('changeOrgName')}
-            className="px-4 py-2 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border border-yellow-500/30 text-sm font-medium rounded-lg transition-all flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-            org name
-          </button>
-          <button 
-            onClick={() => openProposalModal('transfer')}
-            className="px-4 py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-500 border border-orange-500/30 text-sm font-medium rounded-lg transition-all flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
-             transfer
-          </button>
-          <button 
-            onClick={() => openProposalModal('addMember')}
-            className="px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-sm font-medium rounded-lg transition-all flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
-            membership
-          </button>
-        </div>
-      )}
+      {isConnected && <TopActions onOpenProposal={openProposalModal} />}
 
       {/* 主体内容区 */}
       <div className="flex items-start justify-center w-full max-w-6xl gap-8 relative mt-4">
         
-        {/* 👇 左侧便利贴：数据来自链上 allProposals */}
-        <ProposalList proposals={proposals} formatAddress={formatAddress} />
+        {/* 左侧便利贴：数据来自链上 allProposals */}
+        <ProposalList proposals={proposals} formatAddress={formatAddress} onSign={openSignConfirm} />
 
-
-        {/* 右侧主控制台卡片 —— 完全不变 */}
+        {/* 主卡片 */}
         <div className="w-full max-w-2xl bg-[#111111]/90 backdrop-blur-xl border border-[#2a2a2a] rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.8)] transition-all duration-300 overflow-hidden">
           
           <div className="flex justify-between items-center p-6 border-b border-[#2a2a2a] bg-[#1a1a1a]/50">
@@ -423,7 +441,19 @@ function App() {
         onSubmit={handleAddToken}
       />
 
-      {/* Proposal 弹窗 —— 完全不变 */}
+      {/* 👇 签名二次确认弹窗 */}
+      <SignConfirmModal
+        isOpen={!!signTarget}
+        proposal={signTarget}
+        walletAddress={address}
+        isSubmitting={isSigning}
+        error={signError}
+        onCancel={closeSignConfirm}
+        onConfirm={confirmSign}
+        formatAddress={formatAddress}
+      />
+
+      {/* Proposal 弹窗 */}
       {isProposalModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#111] border border-[#333] rounded-2xl p-6 w-full max-w-md shadow-2xl animate-[fadeIn_0.2s_ease-out]">
