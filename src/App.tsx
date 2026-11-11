@@ -1,11 +1,13 @@
 // src/App.tsx
 import { useAccount, useConnect, useDisconnect, useBalance, useChainId, useReadContracts, usePublicClient, useReadContract } from 'wagmi'
 import { formatUnits, isAddress } from 'viem'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { SmartWalletABI } from './abi/SmartWalletABI' 
+import { ProposalSignABI } from './abi/ProposalSignABI' 
 
 // 🔒 Rootstock 上的合约地址
 const SMART_WALLET_ADDRESS = import.meta.env.VITE_SMART_WALLET_ADDRESS as `0x${string}`
+const PROPOSAL_SIGN_ADDRESS = import.meta.env.VITE_PROPOSAL_SIGN_ADDRESS as `0x${string}`
 
 // 默认内置代币 (Rootstock Mainnet)
 const INITIAL_TOKENS = [
@@ -31,13 +33,30 @@ interface Token {
   decimals: number
 }
 
-// 定义 Proposal 的数据结构
+// 👇 统一 proposal 类型
+type ProposalType = 'changeOrgName' | 'transfer' | 'addMember'
+
 interface Proposal {
   id: number
-  type: 'changeOrgName' | 'transfer' | 'addMember'
+  type: ProposalType
   title: string
   description: string
   createdAt: string
+}
+
+// 标题/描述映射
+const TYPE_META: Record<ProposalType, { title: string; description: string }> = {
+  changeOrgName: { title: 'Change Org Name', description: 'Proposal to update the DAO name.' },
+  transfer: { title: 'Transfer Funds', description: 'Proposal to transfer assets out of the vault.' },
+  addMember: { title: 'Add New Member', description: 'Proposal to grant membership and signer rights.' },
+}
+
+// 币种下拉选项
+interface CoinOption {
+  key: string
+  symbol: string
+  decimals: number
+  address?: `0x${string}`  // undefined = 原生 RBTC
 }
 
 function App() {
@@ -55,8 +74,27 @@ function App() {
   const [addError, setAddError] = useState('')
   const [copied, setCopied] = useState(false)
 
-  // 👇 新增：用于存放所有生成的 Proposal
+  // 用于存放所有生成的 Proposal
   const [proposals, setProposals] = useState<Proposal[]>([])
+
+  // 👇 新增：Proposal 弹窗 & 表单状态
+  const [isProposalModalOpen, setIsProposalModalOpen] = useState(false)
+  const [proposalType, setProposalType] = useState<ProposalType>('changeOrgName')
+  const [formError, setFormError] = useState('')
+
+  const [newOrgName, setNewOrgName] = useState('')
+  const [transferTo, setTransferTo] = useState('')
+  const [transferValue, setTransferValue] = useState('')
+  const [selectedCoinKey, setSelectedCoinKey] = useState<string>('native')
+  const [memberAccount, setMemberAccount] = useState('')
+
+  // 币种选项：原生 RBTC + 已追踪 ERC20
+  const coinOptions: CoinOption[] = useMemo(() => [
+    { key: 'native', symbol: 'RBTC', decimals: 18 },
+    ...tokens.map(t => ({ key: t.address, symbol: t.symbol, decimals: t.decimals, address: t.address as `0x${string}` })),
+  ], [tokens])
+
+  const selectedCoin = coinOptions.find(c => c.key === selectedCoinKey)
 
   // 1. 获取 Vault 的 orgName
   const { data: orgName, isLoading: isOrgNameLoading } = useReadContract({
@@ -83,7 +121,6 @@ function App() {
     query: { enabled: isConnected && tokens.length > 0 },
   })
 
-  // 格式化地址
   const formatAddress = (addr?: string) => {
     if (!addr) return ''
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`
@@ -108,7 +145,6 @@ function App() {
   }
 
   const handleAddToken = async () => {
-    // ... (保持你原有的逻辑)
     if (!isAddress(newTokenAddress) || !publicClient) return
     if (tokens.find(t => t.address.toLowerCase() === newTokenAddress.toLowerCase())) return
     setIsAdding(true)
@@ -129,74 +165,111 @@ function App() {
     }
   }
 
-  // 创建 Proposal 的函数
-  const createProposal = (type: 'changeOrgName' | 'transfer' | 'addMember') => {
-    let title = ''
-    let description = ''
-
-    if (type === 'changeOrgName') {
-      title = 'Change Org Name'
-      description = 'Proposal to update the DAO name.'
-    } else if (type === 'transfer') {
-      title = 'Transfer Funds'
-      description = 'Proposal to transfer assets out of the vault.'
-    } else if (type === 'addMember') {
-      title = 'Add New Member'
-      description = 'Proposal to grant membership and signer rights.'
-    }
-
+  // 创建 Proposal（保持你原来的本地逻辑）
+  const createProposal = (type: ProposalType) => {
+    const meta = TYPE_META[type]
     const newProposal: Proposal = {
       id: Date.now(),
       type,
-      title,
-      description,
+      title: meta.title,
+      description: meta.description,
       createdAt: new Date().toLocaleTimeString(),
     }
-    
     setProposals([newProposal, ...proposals])
   }
 
-  // 删除 Proposal 的函数
+  // 删除 Proposal
   const removeProposal = (id: number) => {
     setProposals(proposals.filter(p => p.id !== id))
+  }
+
+  // 👇 打开弹窗（重置表单）
+  const openProposalModal = (type: ProposalType) => {
+    setProposalType(type)
+    setFormError('')
+    setNewOrgName('')
+    setTransferTo('')
+    setTransferValue('')
+    setSelectedCoinKey('native')
+    setMemberAccount('')
+    setIsProposalModalOpen(true)
+  }
+
+  // 👇 表单校验
+  const validateForm = (): string | null => {
+    if (proposalType === 'changeOrgName') {
+      if (!newOrgName.trim()) return 'Org name cannot be empty'
+    }
+    if (proposalType === 'transfer') {
+      if (!isAddress(transferTo)) return 'Invalid recipient address'
+      if (!transferValue || Number(transferValue) <= 0) return 'Amount must be > 0'
+      if (!selectedCoin) return 'Please select a coin'
+    }
+    if (proposalType === 'addMember') {
+      if (!isAddress(memberAccount)) return 'Invalid member address'
+    }
+    return null
+  }
+
+  // 👇 提交（仍然走本地 createProposal）
+  const submitProposal = () => {
+    const err = validateForm()
+    if (err) { setFormError(err); return }
+
+    // 这里仅打日志，方便你确认表单收集到了什么
+    if (proposalType === 'changeOrgName') {
+      console.log('[Proposal] changeOrgName:', { newOrgName })
+    } else if (proposalType === 'transfer') {
+      console.log('[Proposal] transfer:', {
+        to: transferTo,
+        value: transferValue,
+        coin: selectedCoin?.symbol,
+        decimals: selectedCoin?.decimals,
+        tokenAddress: selectedCoin?.address ?? 'native',
+      })
+    } else if (proposalType === 'addMember') {
+      console.log('[Proposal] addMember:', { memberAccount })
+    }
+
+    createProposal(proposalType)
+    setIsProposalModalOpen(false)
   }
 
   return (
     <div className="flex flex-col items-center min-h-screen p-4 relative gap-8">
       
-      {/* 👇 顶部操作栏 */}
+      {/* 顶部操作栏 */}
       {isConnected && (
         <div className="w-full max-w-4xl flex items-center justify-end gap-3 bg-[#1a1a1a]/80 p-4 rounded-2xl border border-[#2a2a2a] shadow-lg">
-          <span className="text-sm text-gray-400 mr-auto pl-2">DAO Proposals:</span>
+          <span className="text-sm text-gray-400 mr-auto pl-2">Proposals:</span>
           <button 
-            onClick={() => createProposal('changeOrgName')}
+            onClick={() => openProposalModal('changeOrgName')}
             className="px-4 py-2 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border border-yellow-500/30 text-sm font-medium rounded-lg transition-all flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
             org name
           </button>
           <button 
-            onClick={() => createProposal('transfer')}
+            onClick={() => openProposalModal('transfer')}
             className="px-4 py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-500 border border-orange-500/30 text-sm font-medium rounded-lg transition-all flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
              transfer
           </button>
           <button 
-            onClick={() => createProposal('addMember')}
+            onClick={() => openProposalModal('addMember')}
             className="px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-sm font-medium rounded-lg transition-all flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
             membership
           </button>
-
         </div>
       )}
 
-      {/* 主体内容区（左侧便利贴，右侧控制台） */}
+      {/* 主体内容区（左侧便利贴，右侧控制台）—— 完全保持原样 */}
       <div className="flex items-start justify-center w-full max-w-6xl gap-8 relative mt-4">
         
-        {/* 👇 左侧：动态渲染的便利贴列表 */}
+        {/* 左侧便利贴 */}
         <div className="hidden lg:flex flex-col gap-6 w-64">
           {proposals.map((prop, index) => (
             <div 
@@ -207,12 +280,10 @@ function App() {
                 zIndex: 10 - index 
               }}
             >
-              {/* 胶带 */}
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-16 h-6 bg-white/50 backdrop-blur-sm -rotate-2 shadow-sm pointer-events-none"></div>
               
               <h3 className="font-bold text-sm mb-2 flex items-center justify-between border-b border-yellow-300/50 pb-2">
                 <span className="truncate">{prop.title}</span>
-                {/* 关闭/丢弃按钮 */}
                 <button onClick={() => removeProposal(prop.id)} className="text-gray-500 hover:text-red-500 text-xs">✕</button>
               </h3>
               
@@ -233,10 +304,9 @@ function App() {
           )}
         </div>
 
-        {/* 右侧：主控制台卡片 */}
+        {/* 右侧主控制台卡片 —— 完全保持原样 */}
         <div className="w-full max-w-2xl bg-[#111111]/90 backdrop-blur-xl border border-[#2a2a2a] rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.8)] transition-all duration-300 overflow-hidden">
           
-          {/* 顶部导航栏 */}
           <div className="flex justify-between items-center p-6 border-b border-[#2a2a2a] bg-[#1a1a1a]/50">
             <div className="flex items-center gap-4">
               <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-orange-500/10 border border-orange-500/20 shadow-[0_0_15px_rgba(249,115,22,0.2)]">
@@ -261,7 +331,6 @@ function App() {
             )}
           </div>
 
-          {/* 内部内容保持原样即可 */}
           {isConnected ? (
              <div className="p-6 space-y-6 animate-[fadeIn_0.3s_ease-out]">
                {/* Vault Address 栏 */}
@@ -324,7 +393,7 @@ function App() {
 
                {/* 底部按钮 */}
                <div className="pt-4 border-t border-[#2a2a2a] grid grid-cols-2 gap-3">
-                 <button onClick={() => createProposal('transfer')} className="py-3 bg-orange-600 hover:bg-orange-500 text-white font-medium rounded-xl transition-all shadow-[0_4px_15px_rgba(249,115,22,0.3)]">Propose Transfer</button>
+                 <button onClick={() => openProposalModal('transfer')} className="py-3 bg-orange-600 hover:bg-orange-500 text-white font-medium rounded-xl transition-all shadow-[0_4px_15px_rgba(249,115,22,0.3)]">Propose Transfer</button>
                  <button onClick={() => setIsAddModalOpen(true)} className="py-3 bg-[#222] hover:bg-[#333] text-white font-medium rounded-xl border border-[#333] transition-all">Track New Asset</button>
                </div>
              </div>
@@ -350,6 +419,111 @@ function App() {
             <div className="flex gap-3 mt-6">
               <button onClick={() => setIsAddModalOpen(false)} className="flex-1 py-2.5 bg-[#222] hover:bg-[#333] text-white rounded-lg text-sm transition-all">Cancel</button>
               <button onClick={handleAddToken} disabled={isAdding || !newTokenAddress} className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-all">{isAdding ? '...' : 'Add Asset'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 👇 Proposal 弹窗：按类型渲染不同表单 */}
+      {isProposalModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#111] border border-[#333] rounded-2xl p-6 w-full max-w-md shadow-2xl animate-[fadeIn_0.2s_ease-out]">
+            <h3 className="text-lg font-bold text-white mb-2">{TYPE_META[proposalType].title}</h3>
+            <p className="text-xs text-gray-400 mb-4">{TYPE_META[proposalType].description}</p>
+
+            <div className="space-y-3 mb-4">
+              {/* org name */}
+              {proposalType === 'changeOrgName' && (
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">New Org Name</label>
+                  <input
+                    type="text"
+                    value={newOrgName}
+                    onChange={e => setNewOrgName(e.target.value)}
+                    placeholder="e.g. Consensys DAO"
+                    className="w-full bg-[#0a0a0a] border border-[#333] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-orange-500 transition-colors"
+                  />
+                </div>
+              )}
+
+              {/* transfer */}
+              {proposalType === 'transfer' && (
+                <>
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Recipient (to)</label>
+                    <input
+                      type="text"
+                      value={transferTo}
+                      onChange={e => setTransferTo(e.target.value)}
+                      placeholder="0x..."
+                      className="w-full bg-[#0a0a0a] border border-[#333] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-orange-500 transition-colors font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Coin</label>
+                    <select
+                      value={selectedCoinKey}
+                      onChange={e => setSelectedCoinKey(e.target.value)}
+                      className="w-full bg-[#0a0a0a] border border-[#333] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-orange-500 transition-colors"
+                    >
+                      {coinOptions.map(c => (
+                        <option key={c.key} value={c.key}>
+                          {c.symbol}{c.address ? ` (${c.address.slice(0, 6)}...${c.address.slice(-4)})` : ' (Native)'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">
+                      Amount {selectedCoin ? `(${selectedCoin.symbol})` : ''}
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={transferValue}
+                      onChange={e => setTransferValue(e.target.value)}
+                      placeholder="0.0"
+                      className="w-full bg-[#0a0a0a] border border-[#333] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-orange-500 transition-colors font-mono"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* membership */}
+              {proposalType === 'addMember' && (
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Member Account</label>
+                  <input
+                    type="text"
+                    value={memberAccount}
+                    onChange={e => setMemberAccount(e.target.value)}
+                    placeholder="0x..."
+                    className="w-full bg-[#0a0a0a] border border-[#333] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-orange-500 transition-colors font-mono"
+                  />
+                </div>
+              )}
+            </div>
+
+            {formError && (
+              <div className="mb-3 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-lg p-2 break-all">
+                {formError}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setIsProposalModalOpen(false)}
+                className="flex-1 py-2.5 bg-[#222] hover:bg-[#333] text-white rounded-lg text-sm transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitProposal}
+                className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm font-medium transition-all"
+              >
+                Submit Proposal
+              </button>
             </div>
           </div>
         </div>
