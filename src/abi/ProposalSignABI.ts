@@ -1,5 +1,16 @@
 export const ProposalSignABI = [
   {
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "_initialSigners",
+        "type": "address[]",
+        "internalType": "address[]"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
     "type": "function",
     "name": "addMember",
     "inputs": [
@@ -54,6 +65,11 @@ export const ProposalSignABI = [
             "name": "infos",
             "type": "string[]",
             "internalType": "string[]"
+          },
+          {
+            "name": "signComplete",
+            "type": "bool",
+            "internalType": "bool"
           }
         ]
       }
@@ -95,6 +111,11 @@ export const ProposalSignABI = [
             "name": "infos",
             "type": "string[]",
             "internalType": "string[]"
+          },
+          {
+            "name": "signComplete",
+            "type": "bool",
+            "internalType": "bool"
           }
         ]
       }
@@ -154,6 +175,25 @@ export const ProposalSignABI = [
   },
   {
     "type": "function",
+    "name": "signProposal",
+    "inputs": [
+      {
+        "name": "_proposal",
+        "type": "uint8",
+        "internalType": "enum ProposalSign.Proposal"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "signatureMap",
     "inputs": [
       {
@@ -172,6 +212,11 @@ export const ProposalSignABI = [
         "name": "proposal",
         "type": "uint8",
         "internalType": "enum ProposalSign.Proposal"
+      },
+      {
+        "name": "signComplete",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "stateMutability": "view"
