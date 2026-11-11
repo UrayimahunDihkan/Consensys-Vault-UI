@@ -49,6 +49,52 @@ export const ProposalSignABI = [
             "name": "proposal",
             "type": "uint8",
             "internalType": "enum ProposalSign.Proposal"
+          },
+          {
+            "name": "infos",
+            "type": "string[]",
+            "internalType": "string[]"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getSignatureInfo",
+    "inputs": [
+      {
+        "name": "hash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct ProposalSign.SignatureInfo",
+        "components": [
+          {
+            "name": "applicant",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "signatures",
+            "type": "address[]",
+            "internalType": "address[]"
+          },
+          {
+            "name": "proposal",
+            "type": "uint8",
+            "internalType": "enum ProposalSign.Proposal"
+          },
+          {
+            "name": "infos",
+            "type": "string[]",
+            "internalType": "string[]"
           }
         ]
       }
@@ -76,12 +122,12 @@ export const ProposalSignABI = [
   },
   {
     "type": "function",
-    "name": "propose",
+    "name": "proposeOrgNameChange",
     "inputs": [
       {
-        "name": "_proposal",
-        "type": "uint8",
-        "internalType": "enum ProposalSign.Proposal"
+        "name": "_newOrgName",
+        "type": "string",
+        "internalType": "string"
       }
     ],
     "outputs": [

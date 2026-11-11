@@ -1,5 +1,5 @@
 // src/App.tsx
-import { useAccount, useConnect, useDisconnect, useBalance, useChainId, useReadContracts, usePublicClient, useReadContract } from 'wagmi'
+import { useAccount, useConnect, useDisconnect, useBalance, useChainId, useReadContracts, usePublicClient, useReadContract, useWriteContract } from 'wagmi'
 import { formatUnits, isAddress } from 'viem'
 import { useState, useMemo } from 'react'
 import { SmartWalletABI } from './abi/SmartWalletABI' 
@@ -36,12 +36,21 @@ interface Token {
 // 👇 统一 proposal 类型
 type ProposalType = 'changeOrgName' | 'transfer' | 'addMember'
 
+// 👇 链上 enum 值 -> 前端 type
+const ENUM_TO_TYPE: Record<number, ProposalType> = {
+  0: 'changeOrgName',
+  1: 'transfer',
+  2: 'addMember',
+}
+
+// 👇 链上 proposal 展示结构
 interface Proposal {
-  id: number
+  hash: `0x${string}`
   type: ProposalType
+  applicant: `0x${string}`
   title: string
   description: string
-  createdAt: string
+  infos: readonly string[]
 }
 
 // 标题/描述映射
@@ -65,6 +74,7 @@ function App() {
   const { disconnect } = useDisconnect()
   const chainId = useChainId()
   const publicClient = usePublicClient()
+  const { writeContractAsync } = useWriteContract()
 
   // 状态：代币列表 & 添加代币弹窗
   const [tokens, setTokens] = useState<Token[]>(INITIAL_TOKENS)
@@ -74,13 +84,11 @@ function App() {
   const [addError, setAddError] = useState('')
   const [copied, setCopied] = useState(false)
 
-  // 用于存放所有生成的 Proposal
-  const [proposals, setProposals] = useState<Proposal[]>([])
-
-  // 👇 新增：Proposal 弹窗 & 表单状态
+  // 👇 Proposal 弹窗 & 表单状态
   const [isProposalModalOpen, setIsProposalModalOpen] = useState(false)
   const [proposalType, setProposalType] = useState<ProposalType>('changeOrgName')
   const [formError, setFormError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [newOrgName, setNewOrgName] = useState('')
   const [transferTo, setTransferTo] = useState('')
@@ -120,6 +128,35 @@ function App() {
     })),
     query: { enabled: isConnected && tokens.length > 0 },
   })
+
+  // 👇 4. 读链上所有 proposal
+  const { data: onChainProposals, refetch: refetchProposals } = useReadContract({
+    address: PROPOSAL_SIGN_ADDRESS,
+    abi: ProposalSignABI,
+    functionName: 'allProposals',
+    query: { enabled: isConnected },
+  })
+
+  // 👇 链上数据 -> 展示结构
+  const proposals: Proposal[] = useMemo(() => {
+    if (!onChainProposals) return []
+    return onChainProposals.map((p, idx) => {
+      const type = ENUM_TO_TYPE[Number(p.proposal)] ?? 'changeOrgName'
+      const meta = TYPE_META[type]
+      // 对 org name proposal，把新名字显示到 description 里，更直观
+      const desc = type === 'changeOrgName' && p.infos[0]
+        ? `→ New name: "${p.infos[0]}"`
+        : meta.description
+      return {
+        hash: `0x${idx}` as `0x${string}`,
+        type,
+        applicant: p.applicant,
+        title: meta.title,
+        description: desc,
+        infos: p.infos,
+      }
+    })
+  }, [onChainProposals])
 
   const formatAddress = (addr?: string) => {
     if (!addr) return ''
@@ -165,24 +202,6 @@ function App() {
     }
   }
 
-  // 创建 Proposal（保持你原来的本地逻辑）
-  const createProposal = (type: ProposalType) => {
-    const meta = TYPE_META[type]
-    const newProposal: Proposal = {
-      id: Date.now(),
-      type,
-      title: meta.title,
-      description: meta.description,
-      createdAt: new Date().toLocaleTimeString(),
-    }
-    setProposals([newProposal, ...proposals])
-  }
-
-  // 删除 Proposal
-  const removeProposal = (id: number) => {
-    setProposals(proposals.filter(p => p.id !== id))
-  }
-
   // 👇 打开弹窗（重置表单）
   const openProposalModal = (type: ProposalType) => {
     setProposalType(type)
@@ -211,28 +230,54 @@ function App() {
     return null
   }
 
-  // 👇 提交（仍然走本地 createProposal）
-  const submitProposal = () => {
+  // 👇 提交
+  const submitProposal = async () => {
     const err = validateForm()
     if (err) { setFormError(err); return }
 
-    // 这里仅打日志，方便你确认表单收集到了什么
-    if (proposalType === 'changeOrgName') {
-      console.log('[Proposal] changeOrgName:', { newOrgName })
-    } else if (proposalType === 'transfer') {
-      console.log('[Proposal] transfer:', {
-        to: transferTo,
-        value: transferValue,
-        coin: selectedCoin?.symbol,
-        decimals: selectedCoin?.decimals,
-        tokenAddress: selectedCoin?.address ?? 'native',
-      })
-    } else if (proposalType === 'addMember') {
-      console.log('[Proposal] addMember:', { memberAccount })
-    }
+    setFormError('')
+    setIsSubmitting(true)
 
-    createProposal(proposalType)
-    setIsProposalModalOpen(false)
+    try {
+      if (proposalType === 'changeOrgName') {
+        const hash = await writeContractAsync({
+          address: PROPOSAL_SIGN_ADDRESS,
+          abi: ProposalSignABI,
+          functionName: 'proposeOrgNameChange',
+          args: [newOrgName],
+        })
+
+        if (publicClient) {
+          await publicClient.waitForTransactionReceipt({ hash })
+        }
+
+        // 👇 从链上重新拉取，不用本地插
+        await refetchProposals()
+
+        setIsProposalModalOpen(false)
+        return
+      }
+
+      // transfer / addMember 暂不改
+      if (proposalType === 'transfer') {
+        console.log('[Proposal] transfer:', {
+          to: transferTo,
+          value: transferValue,
+          coin: selectedCoin?.symbol,
+          decimals: selectedCoin?.decimals,
+          tokenAddress: selectedCoin?.address ?? 'native',
+        })
+      } else if (proposalType === 'addMember') {
+        console.log('[Proposal] addMember:', { memberAccount })
+      }
+
+      setIsProposalModalOpen(false)
+    } catch (e: any) {
+      console.error(e)
+      setFormError(e?.shortMessage || e?.message || 'Transaction failed')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -266,14 +311,14 @@ function App() {
         </div>
       )}
 
-      {/* 主体内容区（左侧便利贴，右侧控制台）—— 完全保持原样 */}
+      {/* 主体内容区 */}
       <div className="flex items-start justify-center w-full max-w-6xl gap-8 relative mt-4">
         
-        {/* 左侧便利贴 */}
+        {/* 👇 左侧便利贴：数据来自链上 allProposals */}
         <div className="hidden lg:flex flex-col gap-6 w-64">
           {proposals.map((prop, index) => (
             <div 
-              key={prop.id}
+              key={prop.hash}
               className="relative bg-yellow-200 w-full p-5 rounded-lg shadow-xl text-gray-800 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl animate-[fadeIn_0.3s_ease-out]"
               style={{ 
                 transform: `rotate(${index % 2 === 0 ? '-2deg' : '2deg'})`, 
@@ -284,7 +329,9 @@ function App() {
               
               <h3 className="font-bold text-sm mb-2 flex items-center justify-between border-b border-yellow-300/50 pb-2">
                 <span className="truncate">{prop.title}</span>
-                <button onClick={() => removeProposal(prop.id)} className="text-gray-500 hover:text-red-500 text-xs">✕</button>
+                <span className="text-[10px] bg-white/60 px-1.5 py-0.5 rounded font-mono">
+                  {prop.type === 'changeOrgName' ? 'NAME' : prop.type === 'transfer' ? 'TRANSFER' : 'MEMBER'}
+                </span>
               </h3>
               
               <p className="text-xs text-gray-600 leading-tight mb-3">
@@ -292,8 +339,8 @@ function App() {
               </p>
               
               <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
-                <span>{prop.createdAt}</span>
-                <span className="bg-white/50 px-1.5 py-0.5 rounded">Draft</span>
+                <span>{formatAddress(prop.applicant)}</span>
+                <span className="bg-white/50 px-1.5 py-0.5 rounded">On-chain</span>
               </div>
             </div>
           ))}
@@ -304,7 +351,7 @@ function App() {
           )}
         </div>
 
-        {/* 右侧主控制台卡片 —— 完全保持原样 */}
+        {/* 右侧主控制台卡片 —— 完全不变 */}
         <div className="w-full max-w-2xl bg-[#111111]/90 backdrop-blur-xl border border-[#2a2a2a] rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.8)] transition-all duration-300 overflow-hidden">
           
           <div className="flex justify-between items-center p-6 border-b border-[#2a2a2a] bg-[#1a1a1a]/50">
@@ -333,7 +380,6 @@ function App() {
 
           {isConnected ? (
              <div className="p-6 space-y-6 animate-[fadeIn_0.3s_ease-out]">
-               {/* Vault Address 栏 */}
                <div className="flex flex-wrap justify-between items-center gap-4 bg-[#0a0a0a] p-4 rounded-xl border border-[#2a2a2a]">
                  <div>
                    <div className="text-xs text-gray-500 mb-1">Vault Address</div>
@@ -355,7 +401,6 @@ function App() {
                  </div>
                </div>
 
-               {/* 资产列表 */}
                <div>
                  <div className="flex justify-between items-center mb-4">
                    <h2 className="text-lg font-semibold text-white">Vault Assets</h2>
@@ -391,7 +436,6 @@ function App() {
                  </div>
                </div>
 
-               {/* 底部按钮 */}
                <div className="pt-4 border-t border-[#2a2a2a] grid grid-cols-2 gap-3">
                  <button onClick={() => openProposalModal('transfer')} className="py-3 bg-orange-600 hover:bg-orange-500 text-white font-medium rounded-xl transition-all shadow-[0_4px_15px_rgba(249,115,22,0.3)]">Propose Transfer</button>
                  <button onClick={() => setIsAddModalOpen(true)} className="py-3 bg-[#222] hover:bg-[#333] text-white font-medium rounded-xl border border-[#333] transition-all">Track New Asset</button>
@@ -409,7 +453,7 @@ function App() {
         </div>
       </div>
 
-      {/* 添加自定义代币弹窗 (保持原样) */}
+      {/* 添加自定义代币弹窗 —— 完全不变 */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#111] border border-[#333] rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-[fadeIn_0.2s_ease-out]">
@@ -424,7 +468,7 @@ function App() {
         </div>
       )}
 
-      {/* 👇 Proposal 弹窗：按类型渲染不同表单 */}
+      {/* Proposal 弹窗 —— 完全不变 */}
       {isProposalModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#111] border border-[#333] rounded-2xl p-6 w-full max-w-md shadow-2xl animate-[fadeIn_0.2s_ease-out]">
@@ -432,7 +476,6 @@ function App() {
             <p className="text-xs text-gray-400 mb-4">{TYPE_META[proposalType].description}</p>
 
             <div className="space-y-3 mb-4">
-              {/* org name */}
               {proposalType === 'changeOrgName' && (
                 <div>
                   <label className="text-xs text-gray-400 block mb-1">New Org Name</label>
@@ -446,7 +489,6 @@ function App() {
                 </div>
               )}
 
-              {/* transfer */}
               {proposalType === 'transfer' && (
                 <>
                   <div>
@@ -490,7 +532,6 @@ function App() {
                 </>
               )}
 
-              {/* membership */}
               {proposalType === 'addMember' && (
                 <div>
                   <label className="text-xs text-gray-400 block mb-1">Member Account</label>
@@ -514,15 +555,17 @@ function App() {
             <div className="flex gap-3">
               <button
                 onClick={() => setIsProposalModalOpen(false)}
-                className="flex-1 py-2.5 bg-[#222] hover:bg-[#333] text-white rounded-lg text-sm transition-all"
+                disabled={isSubmitting}
+                className="flex-1 py-2.5 bg-[#222] hover:bg-[#333] text-white rounded-lg text-sm transition-all disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={submitProposal}
-                className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm font-medium transition-all"
+                disabled={isSubmitting}
+                className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-all"
               >
-                Submit Proposal
+                {isSubmitting ? 'Submitting...' : 'Submit Proposal'}
               </button>
             </div>
           </div>
