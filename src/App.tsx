@@ -4,6 +4,8 @@ import { formatUnits, isAddress } from 'viem'
 import { useState, useMemo } from 'react'
 import { SmartWalletABI } from './abi/SmartWalletABI' 
 import { ProposalSignABI } from './abi/ProposalSignABI' 
+import { ProposalList } from './components/ProposalList'
+import type { Proposal, ProposalType } from './components/ProposalList'
 
 // 🔒 Rootstock 上的合约地址
 const SMART_WALLET_ADDRESS = import.meta.env.VITE_SMART_WALLET_ADDRESS as `0x${string}`
@@ -34,7 +36,7 @@ interface Token {
 }
 
 // 👇 统一 proposal 类型
-type ProposalType = 'changeOrgName' | 'transfer' | 'addMember'
+// type ProposalType = 'changeOrgName' | 'transfer' | 'addMember'
 
 // 👇 链上 enum 值 -> 前端 type
 const ENUM_TO_TYPE: Record<number, ProposalType> = {
@@ -44,16 +46,16 @@ const ENUM_TO_TYPE: Record<number, ProposalType> = {
 }
 
 // 👇 链上 proposal 展示结构（对应新的 SignatureInfo）
-interface Proposal {
-  hash: `0x${string}`
-  type: ProposalType
-  applicant: `0x${string}`
-  title: string
-  description: string
-  infos: readonly string[]
-  signatures: readonly `0x${string}`[]
-  signComplete: boolean
-}
+// interface Proposal {
+//   hash: `0x${string}`
+//   type: ProposalType
+//   applicant: `0x${string}`
+//   title: string
+//   description: string
+//   infos: readonly string[]
+//   signatures: readonly `0x${string}`[]
+//   signComplete: boolean
+// }
 
 // 标题/描述映射
 const TYPE_META: Record<ProposalType, { title: string; description: string }> = {
@@ -67,7 +69,7 @@ interface CoinOption {
   key: string
   symbol: string
   decimals: number
-  address?: `0x${string}`  // undefined = 原生 RBTC
+  address?: `0x${string}` 
 }
 
 function App() {
@@ -83,7 +85,6 @@ function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [newTokenAddress, setNewTokenAddress] = useState('')
   const [isAdding, setIsAdding] = useState(false)
-  const [addError, setAddError] = useState('')
   const [copied, setCopied] = useState(false)
 
   // 👇 Proposal 弹窗 & 表单状态
@@ -319,91 +320,8 @@ function App() {
       <div className="flex items-start justify-center w-full max-w-6xl gap-8 relative mt-4">
         
         {/* 👇 左侧便利贴：数据来自链上 allProposals */}
-        <div className="hidden lg:flex flex-col gap-6 w-64">
-          {proposals.map((prop, index) => (
-            <div 
-              key={prop.hash}
-              className="relative bg-yellow-200 w-full p-5 rounded-lg shadow-xl text-gray-800 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl animate-[fadeIn_0.3s_ease-out]"
-              style={{ 
-                transform: `rotate(${index % 2 === 0 ? '-2deg' : '2deg'})`, 
-                zIndex: 10 - index 
-              }}
-            >
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-16 h-6 bg-white/50 backdrop-blur-sm -rotate-2 shadow-sm pointer-events-none"></div>
-              
-              <h3 className="font-bold text-sm mb-2 flex items-center justify-between border-b border-yellow-300/50 pb-2">
-                <span className="truncate">{prop.title}</span>
-                <span className="text-[10px] bg-white/60 px-1.5 py-0.5 rounded font-mono">
-                  {prop.type === 'changeOrgName' ? 'NAME' : prop.type === 'transfer' ? 'TRANSFER' : 'MEMBER'}
-                </span>
-              </h3>
-              
-              <p className="text-xs text-gray-700 leading-tight mb-2">
-                {prop.description}
-              </p>
+        <ProposalList proposals={proposals} formatAddress={formatAddress} />
 
-              {/* 👇 SignatureInfo 详情 */}
-              <div className="space-y-1.5 text-[10px] text-gray-700 mb-3">
-                <div className="flex justify-between gap-2">
-                  <span className="text-gray-500">Applicant</span>
-                  <span className="font-mono truncate" title={prop.applicant}>
-                    {formatAddress(prop.applicant)}
-                  </span>
-                </div>
-
-                {prop.type === 'changeOrgName' && prop.infos[0] !== undefined && (
-                  <div className="flex justify-between gap-2">
-                    <span className="text-gray-500">New name</span>
-                    <span className="truncate font-medium" title={prop.infos[0]}>
-                      {prop.infos[0] || '(empty)'}
-                    </span>
-                  </div>
-                )}
-
-                <div className="flex justify-between gap-2">
-                  <span className="text-gray-500">Signatures</span>
-                  <span className="font-mono">{prop.signatures.length}</span>
-                </div>
-
-                {prop.signatures.length > 0 && (
-                  <div>
-                    <div className="text-gray-500 mb-0.5">Signers</div>
-                    <div className="space-y-0.5">
-                      {prop.signatures.map((s, i) => (
-                        <div
-                          key={`${prop.hash}-sig-${i}`}
-                          className="font-mono truncate bg-white/40 px-1.5 py-0.5 rounded"
-                          title={s}
-                        >
-                          {i + 1}. {formatAddress(s)}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex justify-between gap-2">
-                  <span className="text-gray-500">Status</span>
-                  <span className={prop.signComplete ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}>
-                    {prop.signComplete ? 'Completed' : 'Pending'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
-                <span>{formatAddress(prop.applicant)}</span>
-                <span className={`px-1.5 py-0.5 rounded ${prop.signComplete ? 'bg-emerald-200' : 'bg-white/50'}`}>
-                  {prop.signComplete ? 'DONE' : 'On-chain'}
-                </span>
-              </div>
-            </div>
-          ))}
-          {proposals.length === 0 && (
-            <div className="text-center p-6 border-2 border-dashed border-[#2a2a2a] rounded-xl text-gray-600 text-sm">
-              No active proposals.<br/>Use actions above.
-            </div>
-          )}
-        </div>
 
         {/* 右侧主控制台卡片 —— 完全不变 */}
         <div className="w-full max-w-2xl bg-[#111111]/90 backdrop-blur-xl border border-[#2a2a2a] rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.8)] transition-all duration-300 overflow-hidden">
@@ -508,7 +426,7 @@ function App() {
       </div>
 
       {/* 添加自定义代币弹窗 —— 完全不变 */}
-      {isAddModalOpen && (
+      { isAddModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#111] border border-[#333] rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-[fadeIn_0.2s_ease-out]">
             <h3 className="text-lg font-bold text-white mb-2">Track New Asset</h3>
