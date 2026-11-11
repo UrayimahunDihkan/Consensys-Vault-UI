@@ -43,7 +43,7 @@ const ENUM_TO_TYPE: Record<number, ProposalType> = {
   2: 'addMember',
 }
 
-// 👇 链上 proposal 展示结构
+// 👇 链上 proposal 展示结构（对应新的 SignatureInfo）
 interface Proposal {
   hash: `0x${string}`
   type: ProposalType
@@ -51,6 +51,8 @@ interface Proposal {
   title: string
   description: string
   infos: readonly string[]
+  signatures: readonly `0x${string}`[]
+  signComplete: boolean
 }
 
 // 标题/描述映射
@@ -154,6 +156,8 @@ function App() {
         title: meta.title,
         description: desc,
         infos: p.infos,
+        signatures: p.signatures,
+        signComplete: p.signComplete,
       }
     })
   }, [onChainProposals])
@@ -334,13 +338,63 @@ function App() {
                 </span>
               </h3>
               
-              <p className="text-xs text-gray-600 leading-tight mb-3">
+              <p className="text-xs text-gray-700 leading-tight mb-2">
                 {prop.description}
               </p>
-              
+
+              {/* 👇 SignatureInfo 详情 */}
+              <div className="space-y-1.5 text-[10px] text-gray-700 mb-3">
+                <div className="flex justify-between gap-2">
+                  <span className="text-gray-500">Applicant</span>
+                  <span className="font-mono truncate" title={prop.applicant}>
+                    {formatAddress(prop.applicant)}
+                  </span>
+                </div>
+
+                {prop.type === 'changeOrgName' && prop.infos[0] !== undefined && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-gray-500">New name</span>
+                    <span className="truncate font-medium" title={prop.infos[0]}>
+                      {prop.infos[0] || '(empty)'}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex justify-between gap-2">
+                  <span className="text-gray-500">Signatures</span>
+                  <span className="font-mono">{prop.signatures.length}</span>
+                </div>
+
+                {prop.signatures.length > 0 && (
+                  <div>
+                    <div className="text-gray-500 mb-0.5">Signers</div>
+                    <div className="space-y-0.5">
+                      {prop.signatures.map((s, i) => (
+                        <div
+                          key={`${prop.hash}-sig-${i}`}
+                          className="font-mono truncate bg-white/40 px-1.5 py-0.5 rounded"
+                          title={s}
+                        >
+                          {i + 1}. {formatAddress(s)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-between gap-2">
+                  <span className="text-gray-500">Status</span>
+                  <span className={prop.signComplete ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}>
+                    {prop.signComplete ? 'Completed' : 'Pending'}
+                  </span>
+                </div>
+              </div>
+
               <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
                 <span>{formatAddress(prop.applicant)}</span>
-                <span className="bg-white/50 px-1.5 py-0.5 rounded">On-chain</span>
+                <span className={`px-1.5 py-0.5 rounded ${prop.signComplete ? 'bg-emerald-200' : 'bg-white/50'}`}>
+                  {prop.signComplete ? 'DONE' : 'On-chain'}
+                </span>
               </div>
             </div>
           ))}
