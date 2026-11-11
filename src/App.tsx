@@ -6,6 +6,7 @@ import { SmartWalletABI } from './abi/SmartWalletABI'
 import { ProposalSignABI } from './abi/ProposalSignABI' 
 import { ProposalList } from './components/ProposalList'
 import type { Proposal, ProposalType } from './components/ProposalList'
+import { AddTokenModal } from './components/AddTokenModal'
 
 // 🔒 Rootstock 上的合约地址
 const SMART_WALLET_ADDRESS = import.meta.env.VITE_SMART_WALLET_ADDRESS as `0x${string}`
@@ -45,18 +46,6 @@ const ENUM_TO_TYPE: Record<number, ProposalType> = {
   2: 'addMember',
 }
 
-// 👇 链上 proposal 展示结构（对应新的 SignatureInfo）
-// interface Proposal {
-//   hash: `0x${string}`
-//   type: ProposalType
-//   applicant: `0x${string}`
-//   title: string
-//   description: string
-//   infos: readonly string[]
-//   signatures: readonly `0x${string}`[]
-//   signComplete: boolean
-// }
-
 // 标题/描述映射
 const TYPE_META: Record<ProposalType, { title: string; description: string }> = {
   changeOrgName: { title: 'Change Org Name', description: 'Proposal to update the DAO name.' },
@@ -83,8 +72,6 @@ function App() {
   // 状态：代币列表 & 添加代币弹窗
   const [tokens, setTokens] = useState<Token[]>(INITIAL_TOKENS)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const [newTokenAddress, setNewTokenAddress] = useState('')
-  const [isAdding, setIsAdding] = useState(false)
   const [copied, setCopied] = useState(false)
 
   // 👇 Proposal 弹窗 & 表单状态
@@ -186,25 +173,29 @@ function App() {
     formattedNative = parseFloat(formatUnits(nativeBalance.value, nativeBalance.decimals)).toFixed(4)
   }
 
-  const handleAddToken = async () => {
-    if (!isAddress(newTokenAddress) || !publicClient) return
-    if (tokens.find(t => t.address.toLowerCase() === newTokenAddress.toLowerCase())) return
-    setIsAdding(true)
-    try {
-      const [symbol, decimals] = await Promise.all([
-        publicClient.readContract({ address: newTokenAddress as `0x${string}`, abi: ERC20_ABI, functionName: 'symbol' }),
-        publicClient.readContract({ address: newTokenAddress as `0x${string}`, abi: ERC20_ABI, functionName: 'decimals' }),
-      ])
-      const newToken: Token = { address: newTokenAddress, symbol: symbol as string, name: 'Custom Asset', decimals: Number(decimals) }
-      setTokens([...tokens, newToken])
-      setNewTokenAddress('')
-      setIsAddModalOpen(false)
-      setTimeout(() => refetchBalances(), 500)
-    } catch (error) {
-      console.error(error)
-    } finally {
-      setIsAdding(false)
+  const handleAddToken = async (address: string) => {
+    if (!isAddress(address) || !publicClient) {
+      throw new Error('Invalid address')
     }
+    if (tokens.find(t => t.address.toLowerCase() === address.toLowerCase())) {
+      throw new Error('Token already tracked')
+    }
+
+    const [symbol, decimals] = await Promise.all([
+      publicClient.readContract({ address: address as `0x${string}`, abi: ERC20_ABI, functionName: 'symbol' }),
+      publicClient.readContract({ address: address as `0x${string}`, abi: ERC20_ABI, functionName: 'decimals' }),
+    ])
+
+    const newToken: Token = {
+      address,
+      symbol: symbol as string,
+      name: 'Custom Asset',
+      decimals: Number(decimals),
+    }
+
+    setTokens(prev => [...prev, newToken])
+    setIsAddModalOpen(false)
+    setTimeout(() => refetchBalances(), 500)
   }
 
   // 👇 打开弹窗（重置表单）
@@ -425,20 +416,12 @@ function App() {
         </div>
       </div>
 
-      {/* 添加自定义代币弹窗 —— 完全不变 */}
-      { isAddModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#111] border border-[#333] rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-[fadeIn_0.2s_ease-out]">
-            <h3 className="text-lg font-bold text-white mb-2">Track New Asset</h3>
-            <p className="text-xs text-gray-400 mb-4">Enter ERC-20 contract address to monitor.</p>
-            <input type="text" value={newTokenAddress} onChange={(e) => setNewTokenAddress(e.target.value)} placeholder="0x..." className="w-full bg-[#0a0a0a] border border-[#333] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-orange-500 transition-colors mb-2 font-mono" />
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => setIsAddModalOpen(false)} className="flex-1 py-2.5 bg-[#222] hover:bg-[#333] text-white rounded-lg text-sm transition-all">Cancel</button>
-              <button onClick={handleAddToken} disabled={isAdding || !newTokenAddress} className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-all">{isAdding ? '...' : 'Add Asset'}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 添加自定义代币弹窗 */}
+      <AddTokenModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onSubmit={handleAddToken}
+      />
 
       {/* Proposal 弹窗 —— 完全不变 */}
       {isProposalModalOpen && (
