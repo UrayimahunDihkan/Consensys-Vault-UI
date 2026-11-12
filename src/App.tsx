@@ -330,7 +330,7 @@ function App() {
       <div className="flex items-start justify-center w-full max-w-6xl gap-8 relative mt-4">
         
         {/* 左侧便利贴：数据来自链上 allProposals */}
-        <ProposalList proposals={proposals} formatAddress={formatAddress} onSign={openSignConfirm} />
+        {isConnected && (<ProposalList proposals={proposals} formatAddress={formatAddress} onSign={openSignConfirm} />)}
 
         {/* 主卡片 */}
         <div className="w-full max-w-2xl bg-[#111111]/90 backdrop-blur-xl border border-[#2a2a2a] rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.8)] transition-all duration-300 overflow-hidden">
