@@ -39,12 +39,12 @@ export function SignConfirmModal({
         <div className="space-y-2 text-xs bg-[#0a0a0a] border border-[#2a2a2a] rounded-xl p-3 mb-4">
           <div className="flex justify-between">
             <span className="text-gray-500">Type</span>
-            <span className="text-orange-400 font-mono">ORG_NAME_CHANG</span>
+            <span className="text-orange-400 font-mono">ORG_NAME_CHANGE</span>
           </div>
-          <div className="flex justify-between">
+          {/* <div className="flex justify-between">
             <span className="text-gray-500">Enum</span>
             <span className="text-white font-mono">{proposal.enumValue}</span>
-          </div>
+          </div> */}
           <div className="flex justify-between gap-2">
             <span className="text-gray-500">New name</span>
             <span className="text-white truncate" title={proposal.infos[0]}>
@@ -69,7 +69,7 @@ export function SignConfirmModal({
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-500">Signatures</span>
+            <span className="text-gray-500">Signatures received</span>
             <span className="text-white font-mono">{proposal.signatures.length}</span>
           </div>
         </div>

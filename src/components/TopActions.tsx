@@ -7,7 +7,7 @@ interface TopActionsProps {
 
 export function TopActions({ onOpenProposal }: TopActionsProps) {
   return (
-    <div className="w-full max-w-4xl flex items-center justify-end gap-3 bg-[#1a1a1a]/80 p-4 rounded-2xl border border-[#2a2a2a] shadow-lg">
+    <div className="w-full max-w-4xl flex items-center justify-end gap-3 bg-white/5 backdrop-blur-md p-4 rounded-2xl border border-white/10 shadow-lg">
       <span className="text-sm text-gray-400 mr-auto pl-2">Proposals:</span>
 
       <button

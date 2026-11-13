@@ -10,7 +10,7 @@ import { AddTokenModal } from './components/AddTokenModal'
 import { TopActions } from './components/TopActions'
 import { SignConfirmModal } from './components/SignConfirmModal'
 
-// 🔒 Rootstock 上的合约地址
+
 const SMART_WALLET_ADDRESS = import.meta.env.VITE_SMART_WALLET_ADDRESS as `0x${string}`
 const PROPOSAL_SIGN_ADDRESS = import.meta.env.VITE_PROPOSAL_SIGN_ADDRESS as `0x${string}`
 
@@ -152,7 +152,7 @@ function App() {
         description: desc,
         infos: p.infos,
         signatures: p.signatures,
-        signComplete: p.signComplete,
+        execFlow: Number(p.execFlow),
         enumValue,
       }
     })

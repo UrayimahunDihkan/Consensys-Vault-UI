@@ -67,9 +67,9 @@ export const ProposalSignABI = [
             "internalType": "string[]"
           },
           {
-            "name": "signComplete",
-            "type": "bool",
-            "internalType": "bool"
+            "name": "execFlow",
+            "type": "uint8",
+            "internalType": "enum ProposalSign.ExecFlow"
           }
         ]
       }
@@ -113,9 +113,9 @@ export const ProposalSignABI = [
             "internalType": "string[]"
           },
           {
-            "name": "signComplete",
-            "type": "bool",
-            "internalType": "bool"
+            "name": "execFlow",
+            "type": "uint8",
+            "internalType": "enum ProposalSign.ExecFlow"
           }
         ]
       }
@@ -214,9 +214,9 @@ export const ProposalSignABI = [
         "internalType": "enum ProposalSign.Proposal"
       },
       {
-        "name": "signComplete",
-        "type": "bool",
-        "internalType": "bool"
+        "name": "execFlow",
+        "type": "uint8",
+        "internalType": "enum ProposalSign.ExecFlow"
       }
     ],
     "stateMutability": "view"
