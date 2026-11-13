@@ -19,6 +19,8 @@ interface ProposalListProps {
   proposals: Proposal[]
   formatAddress: (addr?: string) => string
   onSign: (proposal: Proposal) => void 
+  onExecute: (proposal: Proposal) => void        // 👈 新增
+  executingHash: string | null                   // 👈 新增
 }
 
 const TYPE_LABEL: Record<ProposalType, string> = {
@@ -27,7 +29,13 @@ const TYPE_LABEL: Record<ProposalType, string> = {
   addMember: 'MEMBER',
 }
 
-export function ProposalList({ proposals, formatAddress, onSign }: ProposalListProps) {
+export function ProposalList({ 
+  proposals, 
+  formatAddress, 
+  onSign, 
+  onExecute, 
+  executingHash 
+}: ProposalListProps) {
   const rendered = useMemo(() => proposals, [proposals])
 
   if (rendered.length === 0) {
@@ -111,18 +119,18 @@ export function ProposalList({ proposals, formatAddress, onSign }: ProposalListP
             </div>
           </div>
 
-          <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
+          <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono mb-3">
             <span>{formatAddress(prop.applicant)}</span>
             <span className={`px-1.5 py-0.5 rounded ${prop.signComplete ? 'bg-emerald-200' : 'bg-white/50'}`}>
               {prop.signComplete ? 'DONE' : 'On-chain'}
             </span>
           </div>
 
-        
+          {/* 👇 签名按钮（未完成时） */}
           {prop.type === 'changeOrgName' && !prop.signComplete && (
             <button
               onClick={() => onSign(prop)}
-              className="mt-3 w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold rounded-md transition-all shadow-sm flex items-center justify-center gap-1"
+              className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold rounded-md transition-all shadow-sm flex items-center justify-center gap-1"
             >
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -130,6 +138,27 @@ export function ProposalList({ proposals, formatAddress, onSign }: ProposalListP
               Sign
             </button>
           )}
+
+          {/* 👇 执行按钮（已完成时） */}
+          {prop.type === 'changeOrgName' && prop.signComplete && (
+            <button
+              onClick={() => onExecute(prop)}
+              disabled={executingHash === prop.hash}
+              className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-[11px] font-semibold rounded-md transition-all shadow-sm flex items-center justify-center gap-1"
+            >
+              {executingHash === prop.hash ? (
+                'Executing...'
+              ) : (
+                <>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Execute
+                </>
+              )}
+            </button>
+          )}
+
         </div>
       ))}
     </div>

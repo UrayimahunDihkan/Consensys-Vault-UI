@@ -90,6 +90,9 @@ function App() {
   const [isSigning, setIsSigning] = useState(false)
   const [signError, setSignError] = useState('')
 
+  // 👇 执行状态 (Execute 按钮)
+  const [executingHash, setExecutingHash] = useState<string | null>(null)
+
   // 币种选项：原生 RBTC + 已追踪 ERC20
   const coinOptions: CoinOption[] = useMemo(() => [
     { key: 'native', symbol: 'RBTC', decimals: 18 },
@@ -99,7 +102,7 @@ function App() {
   const selectedCoin = coinOptions.find(c => c.key === selectedCoinKey)
 
   // 1. 获取 Vault 的 orgName
-  const { data: orgName, isLoading: isOrgNameLoading } = useReadContract({
+  const { data: orgName, isLoading: isOrgNameLoading, refetch: refetchOrgName } = useReadContract({
     address: SMART_WALLET_ADDRESS,
     abi: SmartWalletABI,
     functionName: 'orgName',
@@ -155,7 +158,7 @@ function App() {
     })
   }, [onChainProposals])
 
-  // 👇 签名确认弹窗操作（放在 refetchProposals 之后，避免 TDZ）
+  // 👇 签名确认弹窗操作
   const openSignConfirm = (proposal: Proposal) => {
     setSignTarget(proposal)
     setSignError('')
@@ -170,7 +173,6 @@ function App() {
 
   const confirmSign = async () => {
     if (!signTarget) return
-
     setIsSigning(true)
     setSignError('')
 
@@ -181,11 +183,7 @@ function App() {
         functionName: 'signProposal',
         args: [signTarget.enumValue],
       })
-
-      if (publicClient) {
-        await publicClient.waitForTransactionReceipt({ hash })
-      }
-
+      if (publicClient) await publicClient.waitForTransactionReceipt({ hash })
       await refetchProposals()
       closeSignConfirm()
     } catch (e: any) {
@@ -193,6 +191,33 @@ function App() {
       setSignError(e?.shortMessage || e?.message || 'Sign transaction failed')
     } finally {
       setIsSigning(false)
+    }
+  }
+
+  // 👇 执行 Org Name Change 操作
+  const handleExecute = async (proposal: Proposal) => {
+    if (!proposal.infos[0]) return
+
+    setExecutingHash(proposal.hash)
+
+    try {
+      // 调用 Vault 的 setOrgName
+      const hash = await writeContractAsync({
+        address: SMART_WALLET_ADDRESS,
+        abi: SmartWalletABI,
+        functionName: 'setOrgName',
+        args: [proposal.infos[0]],
+      })
+      if (publicClient) await publicClient.waitForTransactionReceipt({ hash })
+      
+      // 刷新数据（更新orgName，以及重新拉取proposal列表）
+      await Promise.all([refetchOrgName(), refetchProposals()])
+      
+    } catch (e: any) {
+      console.error(e)
+      alert(e?.shortMessage || e?.message || 'Execute failed')
+    } finally {
+      setExecutingHash(null)
     }
   }
 
@@ -220,12 +245,8 @@ function App() {
   }
 
   const handleAddToken = async (tokenAddress: string) => {
-    if (!isAddress(tokenAddress) || !publicClient) {
-      throw new Error('Invalid address')
-    }
-    if (tokens.find(t => t.address.toLowerCase() === tokenAddress.toLowerCase())) {
-      throw new Error('Token already tracked')
-    }
+    if (!isAddress(tokenAddress) || !publicClient) throw new Error('Invalid address')
+    if (tokens.find(t => t.address.toLowerCase() === tokenAddress.toLowerCase())) throw new Error('Token already tracked')
 
     const [symbol, decimals] = await Promise.all([
       publicClient.readContract({ address: tokenAddress as `0x${string}`, abi: ERC20_ABI, functionName: 'symbol' }),
@@ -244,7 +265,6 @@ function App() {
     setTimeout(() => refetchBalances(), 500)
   }
 
-  // 👇 打开弹窗（重置表单）
   const openProposalModal = (type: ProposalType) => {
     setProposalType(type)
     setFormError('')
@@ -256,7 +276,6 @@ function App() {
     setIsProposalModalOpen(true)
   }
 
-  // 👇 表单校验
   const validateForm = (): string | null => {
     if (proposalType === 'changeOrgName') {
       if (!newOrgName.trim()) return 'Org name cannot be empty'
@@ -272,7 +291,6 @@ function App() {
     return null
   }
 
-  // 👇 提交
   const submitProposal = async () => {
     const err = validateForm()
     if (err) { setFormError(err); return }
@@ -289,17 +307,12 @@ function App() {
           args: [newOrgName],
         })
 
-        if (publicClient) {
-          await publicClient.waitForTransactionReceipt({ hash })
-        }
-
+        if (publicClient) await publicClient.waitForTransactionReceipt({ hash })
         await refetchProposals()
-
         setIsProposalModalOpen(false)
         return
       }
 
-      // transfer / addMember 暂不改
       if (proposalType === 'transfer') {
         console.log('[Proposal] transfer:', {
           to: transferTo,
@@ -329,8 +342,16 @@ function App() {
       {/* 主体内容区 */}
       <div className="flex items-start justify-center w-full max-w-6xl gap-8 relative mt-4">
         
-        {/* 左侧便利贴：数据来自链上 allProposals */}
-        {isConnected && (<ProposalList proposals={proposals} formatAddress={formatAddress} onSign={openSignConfirm} />)}
+        {/* 左侧便利贴 */}
+        {isConnected && (
+          <ProposalList 
+            proposals={proposals} 
+            formatAddress={formatAddress} 
+            onSign={openSignConfirm} 
+            onExecute={handleExecute} 
+            executingHash={executingHash} 
+          />
+        )}
 
         {/* 主卡片 */}
         <div className="w-full max-w-2xl bg-[#111111]/90 backdrop-blur-xl border border-[#2a2a2a] rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.8)] transition-all duration-300 overflow-hidden">
