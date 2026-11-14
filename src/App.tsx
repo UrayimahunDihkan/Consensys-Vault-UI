@@ -1,6 +1,6 @@
 // src/App.tsx
 import { useAccount, useConnect, useDisconnect, useBalance, useChainId, useReadContracts, usePublicClient, useReadContract, useWriteContract } from 'wagmi'
-import { formatUnits, isAddress } from 'viem'
+import { formatUnits, isAddress, parseUnits } from 'viem'
 import { useState, useMemo } from 'react'
 import { SmartWalletABI } from './abi/SmartWalletABI' 
 import { ProposalSignABI } from './abi/ProposalSignABI' 
@@ -314,15 +314,34 @@ function App() {
       }
 
       if (proposalType === 'transfer') {
-        console.log('[Proposal] transfer:', {
-          to: transferTo,
-          value: transferValue,
-          coin: selectedCoin?.symbol,
-          decimals: selectedCoin?.decimals,
-          tokenAddress: selectedCoin?.address ?? 'native',
+        if (!selectedCoin) throw new Error('Coin not selected')
+
+        // 👇 将输入的金额（字符串）按照代币的 decimals 转换为 BigInt
+        const amountInWei = parseUnits(transferValue, selectedCoin.decimals)
+        // 如果是原生代币 (RBTC)，合约通常用 address(0) 表示
+        const tokenAddress = selectedCoin.address ?? '0x0000000000000000000000000000000000000000'
+
+        const hash = await writeContractAsync({
+          address: PROPOSAL_SIGN_ADDRESS,
+          abi: ProposalSignABI,
+          functionName: 'proposeTransfer',
+          args: [
+            transferTo as `0x${string}`,
+            tokenAddress as `0x${string}`,
+            amountInWei,
+          ],
         })
-      } else if (proposalType === 'addMember') {
+
+        if (publicClient) await publicClient.waitForTransactionReceipt({ hash })
+        await refetchProposals()
+        setIsProposalModalOpen(false)
+        return
+      }
+
+      // 如果 addMember 的合约也写好了，记得在这里加上真实的合约调用
+      if (proposalType === 'addMember') {
         console.log('[Proposal] addMember:', { memberAccount })
+        // TODO: 调用合约 proposeAddMember
       }
 
       setIsProposalModalOpen(false)
@@ -331,6 +350,24 @@ function App() {
       setFormError(e?.shortMessage || e?.message || 'Transaction failed')
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  // 👇 计算当前选中币种的可用余额
+  let currentAvailableBalance = '0.0000'
+  if (selectedCoin) {
+    if (selectedCoin.key === 'native') {
+      // 原生代币
+      currentAvailableBalance = formattedNative
+    } else {
+      // ERC20 代币（从 tokenBalances 数组中找对应的索引）
+      const tokenIndex = tokens.findIndex(t => t.address.toLowerCase() === selectedCoin.address?.toLowerCase())
+      if (tokenIndex !== -1 && tokenBalances?.[tokenIndex]?.status === 'success') {
+        const balanceData = tokenBalances[tokenIndex]
+        currentAvailableBalance = parseFloat(
+          formatUnits(BigInt(balanceData.result), selectedCoin.decimals)
+        ).toFixed(4)
+      }
     }
   }
 
@@ -534,6 +571,21 @@ function App() {
                       placeholder="0.0"
                       className="w-full bg-[#0a0a0a] border border-[#333] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-orange-500 transition-colors font-mono"
                     />
+                    {/* 👇 新增：可用余额展示 */}
+                    {selectedCoin && (
+                      <div className="flex justify-between items-center mt-1.5 px-1">
+                        <span className="text-[10px] text-gray-500">
+                          Available Balance:
+                        </span>
+                        <span 
+                          className="text-[10px] text-gray-300 font-mono cursor-pointer hover:text-orange-400 transition-colors"
+                          onClick={() => setTransferValue(currentAvailableBalance)}
+                          title="Click to use max"
+                        >
+                          {currentAvailableBalance} {selectedCoin.symbol}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </>
               )}

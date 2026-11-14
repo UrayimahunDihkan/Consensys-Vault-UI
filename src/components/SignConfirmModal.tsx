@@ -74,13 +74,6 @@ export function SignConfirmModal({
           </div>
         </div>
 
-        {!isApplicant && (
-          <div className="mb-3 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2">
-            ⚠️ Your wallet is not the applicant. The contract computes the hash from
-            <span className="font-mono"> (enum, msg.sender)</span>, so this signature will revert.
-          </div>
-        )}
-
         {error && (
           <div className="mb-3 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-lg p-2 break-all">
             {error}

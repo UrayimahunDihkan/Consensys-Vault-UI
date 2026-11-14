@@ -86,34 +86,34 @@ export function ProposalList({
                 <span className="font-mono truncate">{formatAddress(prop.applicant)}</span>
               </div>
 
-              {prop.type === 'changeOrgName' && prop.infos[0] !== undefined && (
-                <div className="flex justify-between gap-2">
-                  <span className="text-gray-500">New name</span>
-                  <span className="truncate font-medium">{prop.infos[0] || '(empty)'}</span>
-                </div>
-              )}
-
+            {prop.type === 'changeOrgName' && prop.infos[0] !== undefined && (
               <div className="flex justify-between gap-2">
-                <span className="text-gray-500">Signatures</span>
-                <span className="font-mono">{prop.signatures.length}</span>
+                <span className="text-gray-500">New name</span>
+                <span className="truncate font-medium">{prop.infos[0] || '(empty)'}</span>
               </div>
+            )}
 
-              {prop.signatures.length > 0 && (
-                <div>
-                  <div className="text-gray-500 mb-0.5">Signers</div>
-                  <div className="space-y-0.5">
-                    {prop.signatures.map((s, i) => (
-                      <div
-                        key={`${prop.hash}-sig-${i}`}
-                        className="font-mono truncate bg-white/40 px-1.5 py-0.5 rounded"
-                        title={s}
-                      >
-                        {i + 1}. {formatAddress(s)}
-                      </div>
-                    ))}
-                  </div>
+            {/* 👇 新增：展示 Transfer 的参数 */}
+            {prop.type === 'transfer' && prop.infos.length >= 3 && (
+              <>
+                <div className="flex justify-between gap-2">
+                  <span className="text-gray-500">To</span>
+                  <span className="font-mono truncate" title={prop.infos[0]}>
+                    {formatAddress(prop.infos[0])}
+                  </span>
                 </div>
-              )}
+                <div className="flex justify-between gap-2">
+                  <span className="text-gray-500">Amount</span>
+                  <span className="font-mono">{prop.infos[2]}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-gray-500">Token</span>
+                  <span className="font-mono truncate" title={prop.infos[1]}>
+                    {prop.infos[1] === '0x0000000000000000000000000000000000000000' ? 'RBTC' : formatAddress(prop.infos[1])}
+                  </span>
+                </div>
+              </>
+            )}
 
               <div className="flex justify-between gap-2">
                 <span className="text-gray-500">Status</span>

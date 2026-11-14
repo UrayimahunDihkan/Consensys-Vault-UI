@@ -67,6 +67,21 @@ export const ProposalSignABI = [
             "internalType": "string[]"
           },
           {
+            "name": "transferTo",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "transferCurrency",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "transferAmount",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
             "name": "execFlow",
             "type": "uint8",
             "internalType": "enum ProposalSign.ExecFlow"
@@ -113,6 +128,21 @@ export const ProposalSignABI = [
             "internalType": "string[]"
           },
           {
+            "name": "transferTo",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "transferCurrency",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "transferAmount",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
             "name": "execFlow",
             "type": "uint8",
             "internalType": "enum ProposalSign.ExecFlow"
@@ -124,7 +154,7 @@ export const ProposalSignABI = [
   },
   {
     "type": "function",
-    "name": "indexOfUnsignedProposals",
+    "name": "hashOfUnexecutedProposals",
     "inputs": [
       {
         "name": "",
@@ -143,12 +173,60 @@ export const ProposalSignABI = [
   },
   {
     "type": "function",
+    "name": "markAfterExecuted",
+    "inputs": [
+      {
+        "name": "_proposal",
+        "type": "uint8",
+        "internalType": "enum ProposalSign.Proposal"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "proposeOrgNameChange",
     "inputs": [
       {
         "name": "_newOrgName",
         "type": "string",
         "internalType": "string"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "proposeTransfer",
+    "inputs": [
+      {
+        "name": "_to",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_currency",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_amount",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [
@@ -212,6 +290,21 @@ export const ProposalSignABI = [
         "name": "proposal",
         "type": "uint8",
         "internalType": "enum ProposalSign.Proposal"
+      },
+      {
+        "name": "transferTo",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "transferCurrency",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "transferAmount",
+        "type": "uint256",
+        "internalType": "uint256"
       },
       {
         "name": "execFlow",
