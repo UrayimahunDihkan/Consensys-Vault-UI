@@ -1,5 +1,6 @@
 // src/components/ProposalList.tsx
 import { useMemo } from 'react'
+import { formatUnits } from 'viem'
 
 export type ProposalType = 'changeOrgName' | 'transfer' | 'addMember'
 
@@ -10,6 +11,11 @@ export interface Proposal {
   title: string
   description: string
   infos: readonly string[]
+  // 👇 新增：转账专属字段
+  transferTo?: `0x${string}`
+  transferCurrency?: `0x${string}`
+  transferAmount?: bigint
+  
   signatures: readonly `0x${string}`[]
   execFlow: number  // 0=Pending, 1=Partial, 2=Completed, 3=Executed
   enumValue: number
@@ -86,34 +92,60 @@ export function ProposalList({
                 <span className="font-mono truncate">{formatAddress(prop.applicant)}</span>
               </div>
 
-            {prop.type === 'changeOrgName' && prop.infos[0] !== undefined && (
-              <div className="flex justify-between gap-2">
-                <span className="text-gray-500">New name</span>
-                <span className="truncate font-medium">{prop.infos[0] || '(empty)'}</span>
-              </div>
-            )}
+              {/* 名字修改的展示 */}
+              {prop.type === 'changeOrgName' && prop.infos[0] !== undefined && (
+                <div className="flex justify-between gap-2">
+                  <span className="text-gray-500">New name</span>
+                  <span className="truncate font-medium">{prop.infos[0] || '(empty)'}</span>
+                </div>
+              )}
 
-            {/* 👇 新增：展示 Transfer 的参数 */}
-            {prop.type === 'transfer' && prop.infos.length >= 3 && (
-              <>
-                <div className="flex justify-between gap-2">
-                  <span className="text-gray-500">To</span>
-                  <span className="font-mono truncate" title={prop.infos[0]}>
-                    {formatAddress(prop.infos[0])}
-                  </span>
+              {/* 👇 转账的展示 */}
+              {prop.type === 'transfer' && prop.transferTo && (
+                <>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-gray-500">To</span>
+                    <span className="font-mono truncate" title={prop.transferTo}>
+                      {formatAddress(prop.transferTo)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-gray-500">Amount</span>
+                    <span className="font-mono font-medium">
+                      {/* 这里暂用 18 位精度展示，如果是 USDT 等 6 位精度的代币，数值可能会显示很长，后续可在 App.tsx 中结合 token 列表做精确转换 */}
+                      {prop.transferAmount ? formatUnits(prop.transferAmount, 18) : '0'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-gray-500">Token</span>
+                    <span className="font-mono truncate" title={prop.transferCurrency}>
+                      {prop.transferCurrency === '0x0000000000000000000000000000000000000000' ? 'RBTC' : formatAddress(prop.transferCurrency)}
+                    </span>
+                  </div>
+                </>
+              )}
+
+              <div className="flex justify-between gap-2">
+                <span className="text-gray-500">Signatures</span>
+                <span className="font-mono">{prop.signatures.length}</span>
+              </div>
+
+              {prop.signatures.length > 0 && (
+                <div>
+                  <div className="text-gray-500 mb-0.5">Signers</div>
+                  <div className="space-y-0.5">
+                    {prop.signatures.map((s, i) => (
+                      <div
+                        key={`${prop.hash}-sig-${i}`}
+                        className="font-mono truncate bg-white/40 px-1.5 py-0.5 rounded"
+                        title={s}
+                      >
+                        {i + 1}. {formatAddress(s)}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex justify-between gap-2">
-                  <span className="text-gray-500">Amount</span>
-                  <span className="font-mono">{prop.infos[2]}</span>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <span className="text-gray-500">Token</span>
-                  <span className="font-mono truncate" title={prop.infos[1]}>
-                    {prop.infos[1] === '0x0000000000000000000000000000000000000000' ? 'RBTC' : formatAddress(prop.infos[1])}
-                  </span>
-                </div>
-              </>
-            )}
+              )}
 
               <div className="flex justify-between gap-2">
                 <span className="text-gray-500">Status</span>
@@ -129,8 +161,8 @@ export function ProposalList({
               </div>
             </div>
 
-           
-            {prop.type === 'changeOrgName' && (prop.execFlow === 0 || prop.execFlow === 1) && (
+            {/* 👇 签名按钮：现在把 transfer 也加进来了 */}
+            {(prop.type === 'changeOrgName' || prop.type === 'transfer') && (prop.execFlow === 0 || prop.execFlow === 1) && (
               <button
                 onClick={() => onSign(prop)}
                 className="w-full py-1 text-emerald-800 hover:bg-emerald-800/10 hover:text-emerald-900 text-[11px] font-bold tracking-widest uppercase rounded transition-colors flex items-center justify-center gap-1.5"
@@ -142,8 +174,8 @@ export function ProposalList({
               </button>
             )}
 
-           
-            {prop.type === 'changeOrgName' && isSignComplete && !isExecuted && (
+            {/* 👇 执行按钮：现在把 transfer 也加进来了 */}
+            {(prop.type === 'changeOrgName' || prop.type === 'transfer') && isSignComplete && !isExecuted && (
               <button
                 onClick={() => onExecute(prop)}
                 disabled={executingHash === prop.hash}

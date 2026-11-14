@@ -134,16 +134,19 @@ function App() {
     query: { enabled: isConnected },
   })
 
-  // 👇 链上数据 -> 展示结构
+ 
   const proposals: Proposal[] = useMemo(() => {
     if (!onChainProposals) return []
     return onChainProposals.map((p, idx) => {
       const enumValue = Number(p.proposal)
       const type = ENUM_TO_TYPE[enumValue] ?? 'changeOrgName'
       const meta = TYPE_META[type]
+      
+      // 如果是改名提案，尝试取 infos[0] 展示；如果是转账提案，p.transferAmount 已经在结构体里了
       const desc = type === 'changeOrgName' && p.infos[0]
         ? `→ New name: "${p.infos[0]}"`
         : meta.description
+
       return {
         hash: `0x${idx}` as `0x${string}`,
         type,
@@ -151,6 +154,11 @@ function App() {
         title: meta.title,
         description: desc,
         infos: p.infos,
+        // 👇 新增：映射转账相关的字段（需确保你的 ABI 已更新并包含这些字段）
+        transferTo: p.transferTo,
+        transferCurrency: p.transferCurrency,
+        transferAmount: p.transferAmount,
+        
         signatures: p.signatures,
         execFlow: Number(p.execFlow),
         enumValue,
