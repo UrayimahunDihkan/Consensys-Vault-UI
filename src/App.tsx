@@ -10,11 +10,9 @@ import { AddTokenModal } from './components/AddTokenModal'
 import { TopActions } from './components/TopActions'
 import { SignConfirmModal } from './components/SignConfirmModal'
 
-
 const SMART_WALLET_ADDRESS = import.meta.env.VITE_SMART_WALLET_ADDRESS as `0x${string}`
 const PROPOSAL_SIGN_ADDRESS = import.meta.env.VITE_PROPOSAL_SIGN_ADDRESS as `0x${string}`
 
-// 默认内置代币 (Rootstock Mainnet)
 const INITIAL_TOKENS = [
   {
     address: '0x5a767e7A1A42e5B55A6409024D09D6417AC47B2F', // Rootstock USDT
@@ -24,7 +22,6 @@ const INITIAL_TOKENS = [
   }
 ]
 
-// ERC20 ABI
 const ERC20_ABI = [
   { "inputs": [{ "name": "account", "type": "address" }], "name": "balanceOf", "outputs": [{ "type": "uint256" }], "stateMutability": "view", "type": "function" },
   { "inputs": [], "name": "symbol", "outputs": [{ "type": "string" }], "stateMutability": "view", "type": "function" },
@@ -38,21 +35,18 @@ interface Token {
   decimals: number
 }
 
-// 👇 链上 enum 值 -> 前端 type
 const ENUM_TO_TYPE: Record<number, ProposalType> = {
   0: 'changeOrgName',
   1: 'transfer',
   2: 'addMember',
 }
 
-// 标题/描述映射
 const TYPE_META: Record<ProposalType, { title: string; description: string }> = {
   changeOrgName: { title: 'Change Org Name', description: 'Proposal to update the DAO name.' },
   transfer: { title: 'Transfer Funds', description: 'Proposal to transfer assets out of the vault.' },
-  addMember: { title: 'Add New Member', description: 'Proposal to grant membership and signer rights.' },
+  addMember: { title: 'Membership', description: 'Proposal to add or remove a signer.' },
 }
 
-// 币种下拉选项
 interface CoinOption {
   key: string
   symbol: string
@@ -68,12 +62,12 @@ function App() {
   const publicClient = usePublicClient()
   const { writeContractAsync } = useWriteContract()
 
-  // 状态：代币列表 & 添加代币弹窗
   const [tokens, setTokens] = useState<Token[]>(INITIAL_TOKENS)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  // 👇 用于 signers 的复制反馈
+  const [copiedSigner, setCopiedSigner] = useState<string | null>(null)
 
-  // 👇 Proposal 弹窗 & 表单状态
   const [isProposalModalOpen, setIsProposalModalOpen] = useState(false)
   const [proposalType, setProposalType] = useState<ProposalType>('changeOrgName')
   const [formError, setFormError] = useState('')
@@ -84,16 +78,15 @@ function App() {
   const [transferValue, setTransferValue] = useState('')
   const [selectedCoinKey, setSelectedCoinKey] = useState<string>('native')
   const [memberAccount, setMemberAccount] = useState('')
+  
+  // 👇 Membership 相关状态
+  const [membershipAction, setMembershipAction] = useState<number>(0) // 0=ADD_MEMBER, 1=DELETE_MEMBER
 
-  // 👇 签名确认弹窗状态
   const [signTarget, setSignTarget] = useState<Proposal | null>(null)
   const [isSigning, setIsSigning] = useState(false)
   const [signError, setSignError] = useState('')
-
-  // 👇 执行状态 (Execute 按钮)
   const [executingHash, setExecutingHash] = useState<string | null>(null)
 
-  // 币种选项：原生 RBTC + 已追踪 ERC20
   const coinOptions: CoinOption[] = useMemo(() => [
     { key: 'native', symbol: 'RBTC', decimals: 18 },
     ...tokens.map(t => ({ key: t.address, symbol: t.symbol, decimals: t.decimals, address: t.address as `0x${string}` })),
@@ -101,40 +94,35 @@ function App() {
 
   const selectedCoin = coinOptions.find(c => c.key === selectedCoinKey)
 
-  // 1. 获取 Vault 的 orgName
   const { data: orgName, isLoading: isOrgNameLoading, refetch: refetchOrgName } = useReadContract({
-    address: SMART_WALLET_ADDRESS,
-    abi: SmartWalletABI,
-    functionName: 'orgName',
+    address: SMART_WALLET_ADDRESS, abi: SmartWalletABI, functionName: 'orgName',
     query: { enabled: isConnected },
   });
 
-  // 2. 获取 Vault 的原生 RBTC 余额
   const { data: nativeBalance, isLoading: isNativeLoading } = useBalance({
-    address: SMART_WALLET_ADDRESS,
-    query: { enabled: isConnected },
+    address: SMART_WALLET_ADDRESS, query: { enabled: isConnected },
   })
 
-  // 3. 批量获取 Vault 的 ERC-20 代币余额
   const { data: tokenBalances, isLoading: isTokensLoading, refetch: refetchBalances } = useReadContracts({
     contracts: tokens.map((token) => ({
-      address: token.address as `0x${string}`,
-      abi: ERC20_ABI,
-      functionName: 'balanceOf',
-      args: [SMART_WALLET_ADDRESS],
+      address: token.address as `0x${string}`, abi: ERC20_ABI, functionName: 'balanceOf', args: [SMART_WALLET_ADDRESS],
     })),
     query: { enabled: isConnected && tokens.length > 0 },
   })
 
-  // 👇 4. 读链上所有 proposal
   const { data: onChainProposals, refetch: refetchProposals } = useReadContract({
-    address: PROPOSAL_SIGN_ADDRESS,
-    abi: ProposalSignABI,
-    functionName: 'allProposals',
+    address: PROPOSAL_SIGN_ADDRESS, abi: ProposalSignABI, functionName: 'allProposals',
     query: { enabled: isConnected },
   })
 
- 
+  // 👇 新增：获取所有的 Signers
+  const { data: allSigners, refetch: refetchSigners } = useReadContract({
+    address: PROPOSAL_SIGN_ADDRESS,
+    abi: ProposalSignABI,
+    functionName: 'allMembers',
+    query: { enabled: isConnected },
+  })
+
   const proposals: Proposal[] = useMemo(() => {
     if (!onChainProposals) return []
     return onChainProposals.map((p, idx) => {
@@ -142,10 +130,13 @@ function App() {
       const type = ENUM_TO_TYPE[enumValue] ?? 'changeOrgName'
       const meta = TYPE_META[type]
       
-      // 如果是改名提案，尝试取 infos[0] 展示；如果是转账提案，p.transferAmount 已经在结构体里了
-      const desc = type === 'changeOrgName' && p.infos[0]
-        ? `→ New name: "${p.infos[0]}"`
-        : meta.description
+      let desc = meta.description
+      if (type === 'changeOrgName' && p.infos[0]) {
+        desc = `→ New name: "${p.infos[0]}"`
+      } else if (type === 'addMember') {
+        const isAdd = Number(p.membershipProposal) === 0
+        desc = `→ ${isAdd ? 'Add' : 'Remove'} signer: ${p.membershipAddr ? p.membershipAddr.slice(0,6)+'...' : ''}`
+      }
 
       return {
         hash: `0x${idx}` as `0x${string}`,
@@ -154,11 +145,11 @@ function App() {
         title: meta.title,
         description: desc,
         infos: p.infos,
-        // 👇 新增：映射转账相关的字段（需确保你的 ABI 已更新并包含这些字段）
         transferTo: p.transferTo,
         transferCurrency: p.transferCurrency,
         transferAmount: p.transferAmount,
-        
+        membershipAddr: p.membershipAddr,
+        membershipProposal: p.membershipProposal,
         signatures: p.signatures,
         execFlow: Number(p.execFlow),
         enumValue,
@@ -166,7 +157,6 @@ function App() {
     })
   }, [onChainProposals])
 
-  // 👇 签名确认弹窗操作
   const openSignConfirm = (proposal: Proposal) => {
     setSignTarget(proposal)
     setSignError('')
@@ -186,9 +176,7 @@ function App() {
 
     try {
       const hash = await writeContractAsync({
-        address: PROPOSAL_SIGN_ADDRESS,
-        abi: ProposalSignABI,
-        functionName: 'signProposal',
+        address: PROPOSAL_SIGN_ADDRESS, abi: ProposalSignABI, functionName: 'signProposal',
         args: [signTarget.enumValue],
       })
       if (publicClient) await publicClient.waitForTransactionReceipt({ hash })
@@ -202,25 +190,27 @@ function App() {
     }
   }
 
-  // 👇 执行 Org Name Change 操作
   const handleExecute = async (proposal: Proposal) => {
-    if (!proposal.infos[0]) return
-
     setExecutingHash(proposal.hash)
-
     try {
-      // 调用 Vault 的 setOrgName
-      const hash = await writeContractAsync({
-        address: SMART_WALLET_ADDRESS,
-        abi: SmartWalletABI,
-        functionName: 'setOrgName',
-        args: [proposal.infos[0]],
-      })
-      if (publicClient) await publicClient.waitForTransactionReceipt({ hash })
-      
-      // 刷新数据（更新orgName，以及重新拉取proposal列表）
-      await Promise.all([refetchOrgName(), refetchProposals()])
-      
+      if (proposal.type === 'changeOrgName') {
+        if (!proposal.infos[0]) return
+        const hash = await writeContractAsync({
+          address: SMART_WALLET_ADDRESS, abi: SmartWalletABI, functionName: 'setOrgName',
+          args: [proposal.infos[0]],
+        })
+        if (publicClient) await publicClient.waitForTransactionReceipt({ hash })
+        await Promise.all([refetchOrgName(), refetchProposals()])
+      } else if (proposal.type === 'addMember') {
+        // 调用无参的 execMembership
+        const hash = await writeContractAsync({
+          address: PROPOSAL_SIGN_ADDRESS, abi: ProposalSignABI, functionName: 'execMembership',
+          args: [],
+        })
+        if (publicClient) await publicClient.waitForTransactionReceipt({ hash })
+        // 执行完 membership 后，signers 列表会变，需要刷新
+        await Promise.all([refetchProposals(), refetchSigners()])
+      }
     } catch (e: any) {
       console.error(e)
       alert(e?.shortMessage || e?.message || 'Execute failed')
@@ -247,6 +237,14 @@ function App() {
     } catch (err) {}
   }
 
+  const handleCopySigner = async (signer: string) => {
+    try {
+      await navigator.clipboard.writeText(signer)
+      setCopiedSigner(signer)
+      setTimeout(() => setCopiedSigner(null), 2000)
+    } catch (err) {}
+  }
+
   let formattedNative = '0.0000'
   if (nativeBalance && nativeBalance.value !== undefined) {
     formattedNative = parseFloat(formatUnits(nativeBalance.value, nativeBalance.decimals)).toFixed(4)
@@ -261,12 +259,7 @@ function App() {
       publicClient.readContract({ address: tokenAddress as `0x${string}`, abi: ERC20_ABI, functionName: 'decimals' }),
     ])
 
-    const newToken: Token = {
-      address: tokenAddress,
-      symbol: symbol as string,
-      name: 'Custom Asset',
-      decimals: Number(decimals),
-    }
+    const newToken: Token = { address: tokenAddress, symbol: symbol as string, name: 'Custom Asset', decimals: Number(decimals) }
 
     setTokens(prev => [...prev, newToken])
     setIsAddModalOpen(false)
@@ -281,6 +274,7 @@ function App() {
     setTransferValue('')
     setSelectedCoinKey('native')
     setMemberAccount('')
+    setMembershipAction(0)
     setIsProposalModalOpen(true)
   }
 
@@ -309,12 +303,8 @@ function App() {
     try {
       if (proposalType === 'changeOrgName') {
         const hash = await writeContractAsync({
-          address: PROPOSAL_SIGN_ADDRESS,
-          abi: ProposalSignABI,
-          functionName: 'proposeOrgNameChange',
-          args: [newOrgName],
+          address: PROPOSAL_SIGN_ADDRESS, abi: ProposalSignABI, functionName: 'proposeOrgNameChange', args: [newOrgName],
         })
-
         if (publicClient) await publicClient.waitForTransactionReceipt({ hash })
         await refetchProposals()
         setIsProposalModalOpen(false)
@@ -323,33 +313,27 @@ function App() {
 
       if (proposalType === 'transfer') {
         if (!selectedCoin) throw new Error('Coin not selected')
-
-        // 👇 将输入的金额（字符串）按照代币的 decimals 转换为 BigInt
         const amountInWei = parseUnits(transferValue, selectedCoin.decimals)
-        // 如果是原生代币 (RBTC)，合约通常用 address(0) 表示
         const tokenAddress = selectedCoin.address ?? '0x0000000000000000000000000000000000000000'
-
         const hash = await writeContractAsync({
-          address: PROPOSAL_SIGN_ADDRESS,
-          abi: ProposalSignABI,
-          functionName: 'proposeTransfer',
-          args: [
-            transferTo as `0x${string}`,
-            tokenAddress as `0x${string}`,
-            amountInWei,
-          ],
+          address: PROPOSAL_SIGN_ADDRESS, abi: ProposalSignABI, functionName: 'proposeTransfer',
+          args: [transferTo as `0x${string}`, tokenAddress as `0x${string}`, amountInWei],
         })
-
         if (publicClient) await publicClient.waitForTransactionReceipt({ hash })
         await refetchProposals()
         setIsProposalModalOpen(false)
         return
       }
 
-      // 如果 addMember 的合约也写好了，记得在这里加上真实的合约调用
       if (proposalType === 'addMember') {
-        console.log('[Proposal] addMember:', { memberAccount })
-        // TODO: 调用合约 proposeAddMember
+        const hash = await writeContractAsync({
+          address: PROPOSAL_SIGN_ADDRESS, abi: ProposalSignABI, functionName: 'proposeMembership',
+          args: [memberAccount as `0x${string}`, membershipAction],
+        })
+        if (publicClient) await publicClient.waitForTransactionReceipt({ hash })
+        await refetchProposals()
+        setIsProposalModalOpen(false)
+        return
       }
 
       setIsProposalModalOpen(false)
@@ -361,20 +345,15 @@ function App() {
     }
   }
 
-  // 👇 计算当前选中币种的可用余额
   let currentAvailableBalance = '0.0000'
   if (selectedCoin) {
     if (selectedCoin.key === 'native') {
-      // 原生代币
       currentAvailableBalance = formattedNative
     } else {
-      // ERC20 代币（从 tokenBalances 数组中找对应的索引）
       const tokenIndex = tokens.findIndex(t => t.address.toLowerCase() === selectedCoin.address?.toLowerCase())
       if (tokenIndex !== -1 && tokenBalances?.[tokenIndex]?.status === 'success') {
         const balanceData = tokenBalances[tokenIndex]
-        currentAvailableBalance = parseFloat(
-          formatUnits(BigInt(balanceData.result), selectedCoin.decimals)
-        ).toFixed(4)
+        currentAvailableBalance = parseFloat(formatUnits(BigInt(balanceData.result), selectedCoin.decimals)).toFixed(4)
       }
     }
   }
@@ -384,10 +363,8 @@ function App() {
       
       {isConnected && <TopActions onOpenProposal={openProposalModal} />}
 
-      {/* 主体内容区 */}
       <div className="flex items-start justify-center w-full max-w-6xl gap-8 relative mt-4">
         
-        {/* 左侧便利贴 */}
         {isConnected && (
           <ProposalList 
             proposals={proposals} 
@@ -398,7 +375,6 @@ function App() {
           />
         )}
 
-        {/* 主卡片 */}
         <div className="w-full max-w-2xl bg-[#111111]/90 backdrop-blur-xl border border-[#2a2a2a] rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.8)] transition-all duration-300 overflow-hidden">
           
           <div className="flex justify-between items-center p-6 border-b border-[#2a2a2a] bg-[#1a1a1a]/50">
@@ -483,7 +459,39 @@ function App() {
                  </div>
                </div>
 
-               <div className="pt-4 border-t border-[#2a2a2a] grid grid-cols-2 gap-3">
+               {/* 👇 新增：展示 Vault Signers */}
+               <div className="pt-4 border-t border-[#2a2a2a]">
+                 <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                   <svg className="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                   </svg>
+                   Vault Signers
+                 </h2>
+                 <div className="flex flex-wrap gap-2">
+                   {allSigners && allSigners.length > 0 ? (
+                     allSigners.map((signer) => (
+                       <div 
+                         key={signer}
+                         onClick={() => handleCopySigner(signer)}
+                         className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#1a1a1a]/80 border border-[#333] hover:border-[#555] rounded-lg text-xs font-mono text-gray-300 cursor-pointer transition-colors group relative"
+                         title={signer}
+                       >
+                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                         {formatAddress(signer)}
+                         {copiedSigner === signer && (
+                           <span className="absolute -top-7 left-1/2 -translate-x-1/2 bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded shadow pointer-events-none">
+                             Copied!
+                           </span>
+                         )}
+                       </div>
+                     ))
+                   ) : (
+                     <div className="text-xs text-gray-500 italic py-2">No signers found.</div>
+                   )}
+                 </div>
+               </div>
+
+               <div className="pt-4 border-t border-[#2a2a2a] grid grid-cols-2 gap-3 mt-6">
                  <button onClick={() => openProposalModal('transfer')} className="py-3 bg-orange-600 hover:bg-orange-500 text-white font-medium rounded-xl transition-all shadow-[0_4px_15px_rgba(249,115,22,0.3)]">Propose Transfer</button>
                  <button onClick={() => setIsAddModalOpen(true)} className="py-3 bg-[#222] hover:bg-[#333] text-white font-medium rounded-xl border border-[#333] transition-all">Track New Asset</button>
                </div>
@@ -500,14 +508,12 @@ function App() {
         </div>
       </div>
 
-      {/* 添加自定义代币弹窗 */}
       <AddTokenModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onSubmit={handleAddToken}
       />
 
-      {/* 👇 签名二次确认弹窗 */}
       <SignConfirmModal
         isOpen={!!signTarget}
         proposal={signTarget}
@@ -579,12 +585,9 @@ function App() {
                       placeholder="0.0"
                       className="w-full bg-[#0a0a0a] border border-[#333] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-orange-500 transition-colors font-mono"
                     />
-                    {/* 👇 新增：可用余额展示 */}
                     {selectedCoin && (
                       <div className="flex justify-between items-center mt-1.5 px-1">
-                        <span className="text-[10px] text-gray-500">
-                          Available Balance:
-                        </span>
+                        <span className="text-[10px] text-gray-500">Available Balance:</span>
                         <span 
                           className="text-[10px] text-gray-300 font-mono cursor-pointer hover:text-orange-400 transition-colors"
                           onClick={() => setTransferValue(currentAvailableBalance)}
@@ -599,16 +602,29 @@ function App() {
               )}
 
               {proposalType === 'addMember' && (
-                <div>
-                  <label className="text-xs text-gray-400 block mb-1">Member Account</label>
-                  <input
-                    type="text"
-                    value={memberAccount}
-                    onChange={e => setMemberAccount(e.target.value)}
-                    placeholder="0x..."
-                    className="w-full bg-[#0a0a0a] border border-[#333] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-orange-500 transition-colors font-mono"
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Action</label>
+                    <select
+                      value={membershipAction}
+                      onChange={e => setMembershipAction(Number(e.target.value))}
+                      className="w-full bg-[#0a0a0a] border border-[#333] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-orange-500 transition-colors mb-3"
+                    >
+                      <option value={0}>Add Member</option>
+                      <option value={1}>Remove Member</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Member Account</label>
+                    <input
+                      type="text"
+                      value={memberAccount}
+                      onChange={e => setMemberAccount(e.target.value)}
+                      placeholder="0x..."
+                      className="w-full bg-[#0a0a0a] border border-[#333] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-orange-500 transition-colors font-mono"
+                    />
+                  </div>
+                </>
               )}
             </div>
 

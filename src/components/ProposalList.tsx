@@ -11,10 +11,13 @@ export interface Proposal {
   title: string
   description: string
   infos: readonly string[]
-  // 👇 新增：转账专属字段
+  // 转账专属字段
   transferTo?: `0x${string}`
   transferCurrency?: `0x${string}`
   transferAmount?: bigint
+  // 👇 Membership 专属字段
+  membershipAddr?: `0x${string}`
+  membershipProposal?: number // 0=ADD_MEMBER, 1=DELETE_MEMBER
   
   signatures: readonly `0x${string}`[]
   execFlow: number  // 0=Pending, 1=Partial, 2=Completed, 3=Executed
@@ -32,7 +35,7 @@ interface ProposalListProps {
 const TYPE_LABEL: Record<ProposalType, string> = {
   changeOrgName: 'NAME',
   transfer: 'TRANSFER',
-  addMember: 'MEMBER',
+  addMember: 'MEMBERSHIP',
 }
 
 export function ProposalList({ 
@@ -57,10 +60,12 @@ export function ProposalList({
   return (
     <div className="hidden lg:flex flex-col gap-6 w-64">
       {rendered.map((prop, index) => {
-        // 解析状态
         const isExecuted = prop.execFlow === 3
         const isSignComplete = prop.execFlow === 2
         const isPartial = prop.execFlow === 1
+
+        // 所有的类型都可以签名和执行
+        const isActionable = prop.type === 'changeOrgName' || prop.type === 'transfer' || prop.type === 'addMember'
 
         return (
           <div
@@ -100,7 +105,7 @@ export function ProposalList({
                 </div>
               )}
 
-              {/* 👇 转账的展示 */}
+              {/* 转账的展示 */}
               {prop.type === 'transfer' && prop.transferTo && (
                 <>
                   <div className="flex justify-between gap-2">
@@ -112,7 +117,6 @@ export function ProposalList({
                   <div className="flex justify-between gap-2">
                     <span className="text-gray-500">Amount</span>
                     <span className="font-mono font-medium">
-                      {/* 这里暂用 18 位精度展示，如果是 USDT 等 6 位精度的代币，数值可能会显示很长，后续可在 App.tsx 中结合 token 列表做精确转换 */}
                       {prop.transferAmount ? formatUnits(prop.transferAmount, 18) : '0'}
                     </span>
                   </div>
@@ -120,6 +124,24 @@ export function ProposalList({
                     <span className="text-gray-500">Token</span>
                     <span className="font-mono truncate" title={prop.transferCurrency}>
                       {prop.transferCurrency === '0x0000000000000000000000000000000000000000' ? 'RBTC' : formatAddress(prop.transferCurrency)}
+                    </span>
+                  </div>
+                </>
+              )}
+
+              {/* 👇 Membership 的展示 */}
+              {prop.type === 'addMember' && prop.membershipAddr && (
+                <>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-gray-500">Action</span>
+                    <span className={`font-semibold ${prop.membershipProposal === 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      {prop.membershipProposal === 0 ? 'Add Member' : 'Remove Member'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-gray-500">The member</span>
+                    <span className="font-mono truncate" title={prop.membershipAddr}>
+                      {formatAddress(prop.membershipAddr)}
                     </span>
                   </div>
                 </>
@@ -161,8 +183,8 @@ export function ProposalList({
               </div>
             </div>
 
-            {/* 👇 签名按钮：现在把 transfer 也加进来了 */}
-            {(prop.type === 'changeOrgName' || prop.type === 'transfer') && (prop.execFlow === 0 || prop.execFlow === 1) && (
+            {/* 签名按钮 */}
+            {isActionable && (prop.execFlow === 0 || prop.execFlow === 1) && (
               <button
                 onClick={() => onSign(prop)}
                 className="w-full py-1 text-emerald-800 hover:bg-emerald-800/10 hover:text-emerald-900 text-[11px] font-bold tracking-widest uppercase rounded transition-colors flex items-center justify-center gap-1.5"
@@ -174,8 +196,8 @@ export function ProposalList({
               </button>
             )}
 
-            {/* 👇 执行按钮：现在把 transfer 也加进来了 */}
-            {(prop.type === 'changeOrgName' || prop.type === 'transfer') && isSignComplete && !isExecuted && (
+            {/* 执行按钮 */}
+            {isActionable && isSignComplete && !isExecuted && (
               <button
                 onClick={() => onExecute(prop)}
                 disabled={executingHash === prop.hash}

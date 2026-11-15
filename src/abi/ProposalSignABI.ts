@@ -82,6 +82,16 @@ export const ProposalSignABI = [
             "internalType": "uint256"
           },
           {
+            "name": "membershipAddr",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "membershipProposal",
+            "type": "uint8",
+            "internalType": "enum ProposalSign.MembershipProposal"
+          },
+          {
             "name": "execFlow",
             "type": "uint8",
             "internalType": "enum ProposalSign.ExecFlow"
@@ -90,6 +100,38 @@ export const ProposalSignABI = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "contains",
+    "inputs": [
+      {
+        "name": "_signer",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "execMembership",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -143,6 +185,16 @@ export const ProposalSignABI = [
             "internalType": "uint256"
           },
           {
+            "name": "membershipAddr",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "membershipProposal",
+            "type": "uint8",
+            "internalType": "enum ProposalSign.MembershipProposal"
+          },
+          {
             "name": "execFlow",
             "type": "uint8",
             "internalType": "enum ProposalSign.ExecFlow"
@@ -179,6 +231,30 @@ export const ProposalSignABI = [
         "name": "_proposal",
         "type": "uint8",
         "internalType": "enum ProposalSign.Proposal"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "proposeMembership",
+    "inputs": [
+      {
+        "name": "_member",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_membershipProposal",
+        "type": "uint8",
+        "internalType": "enum ProposalSign.MembershipProposal"
       }
     ],
     "outputs": [
@@ -305,6 +381,16 @@ export const ProposalSignABI = [
         "name": "transferAmount",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "membershipAddr",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "membershipProposal",
+        "type": "uint8",
+        "internalType": "enum ProposalSign.MembershipProposal"
       },
       {
         "name": "execFlow",

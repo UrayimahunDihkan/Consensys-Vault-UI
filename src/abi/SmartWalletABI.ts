@@ -19,35 +19,17 @@ export const SmartWalletABI = [
   },
   {
     "type": "function",
-    "name": "execute",
-    "inputs": [
-      {
-        "name": "target",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "value",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "data",
-        "type": "bytes",
-        "internalType": "bytes"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "payable"
-  },
-  {
-    "type": "function",
     "name": "initialize",
     "inputs": [
       {
         "name": "_orgName",
         "type": "string",
         "internalType": "string"
+      },
+      {
+        "name": "_proposalSignAddress",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [],
@@ -69,6 +51,19 @@ export const SmartWalletABI = [
   {
     "type": "function",
     "name": "owner",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "proposalSignAddress",
     "inputs": [],
     "outputs": [
       {
@@ -107,6 +102,19 @@ export const SmartWalletABI = [
         "name": "_newOrgValue",
         "type": "string",
         "internalType": "string"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setProposalSignAddress",
+    "inputs": [
+      {
+        "name": "_newAddress",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [],

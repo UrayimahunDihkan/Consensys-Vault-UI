@@ -29,7 +29,6 @@ export function SignConfirmModal({
     walletAddress &&
     walletAddress.toLowerCase() === proposal.applicant.toLowerCase()
 
-  // 辅助函数：把 enumValue 转成可读字符串
   const getProposalTypeLabel = (val: number) => {
     switch (val) {
       case 0: return 'ORG_NAME_CHANGE'
@@ -48,13 +47,11 @@ export function SignConfirmModal({
         </p>
 
         <div className="space-y-2 text-xs bg-[#0a0a0a] border border-[#2a2a2a] rounded-xl p-3 mb-4">
-          {/* Type：动态展示 */}
           <div className="flex justify-between">
             <span className="text-gray-500">Type</span>
             <span className="text-orange-400 font-mono">{getProposalTypeLabel(proposal.enumValue)}</span>
           </div>
 
-          {/* 👇 如果只有改名才展示 New name */}
           {proposal.type === 'changeOrgName' && (
             <div className="flex justify-between gap-2">
               <span className="text-gray-500">New name</span>
@@ -64,7 +61,6 @@ export function SignConfirmModal({
             </div>
           )}
 
-          {/* 👇 如果是转账才展示 To / Amount / Token */}
           {proposal.type === 'transfer' && proposal.transferTo && (
             <>
               <div className="flex justify-between gap-2">
@@ -88,7 +84,24 @@ export function SignConfirmModal({
             </>
           )}
 
-          {/* 不受影响的基础展示 */}
+          {/* 👇 Membership 详情展示 */}
+          {proposal.type === 'addMember' && proposal.membershipAddr && (
+            <>
+              <div className="flex justify-between gap-2">
+                <span className="text-gray-500">Action</span>
+                <span className={`font-semibold ${proposal.membershipProposal === 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {proposal.membershipProposal === 0 ? 'Add Member' : 'Remove Member'}
+                </span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className="text-gray-500">Member</span>
+                <span className="text-white font-mono truncate" title={proposal.membershipAddr}>
+                  {proposal.membershipAddr}
+                </span>
+              </div>
+            </>
+          )}
+
           <div className="flex justify-between gap-2">
             <span className="text-gray-500">Applicant</span>
             <span className="text-white font-mono truncate" title={proposal.applicant}>
@@ -111,13 +124,6 @@ export function SignConfirmModal({
             <span className="text-white font-mono">{proposal.signatures.length}</span>
           </div>
         </div>
-
-        {!isApplicant && (
-          <div className="mb-3 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2">
-            ⚠️ Your wallet is not the applicant. The contract computes the hash from
-            <span className="font-mono"> (enum, msg.sender)</span>, so this signature will revert.
-          </div>
-        )}
 
         {error && (
           <div className="mb-3 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-lg p-2 break-all">
