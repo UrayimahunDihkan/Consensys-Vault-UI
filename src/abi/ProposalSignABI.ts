@@ -103,6 +103,19 @@ export const ProposalSignABI = [
   },
   {
     "type": "function",
+    "name": "consensusWalletAddress",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "contains",
     "inputs": [
       {
@@ -123,6 +136,19 @@ export const ProposalSignABI = [
   {
     "type": "function",
     "name": "execMembership",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "execTransfer",
     "inputs": [],
     "outputs": [
       {
@@ -329,6 +355,25 @@ export const ProposalSignABI = [
   },
   {
     "type": "function",
+    "name": "setConsensusWalletAddress",
+    "inputs": [
+      {
+        "name": "_consensusWalletAddress",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "signProposal",
     "inputs": [
       {
@@ -399,5 +444,10 @@ export const ProposalSignABI = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "error",
+    "name": "ReentrancyGuardReentrantCall",
+    "inputs": []
   }
 ] as const;

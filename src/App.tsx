@@ -204,14 +204,25 @@ function App() {
         })
         if (publicClient) await publicClient.waitForTransactionReceipt({ hash })
         await Promise.all([refetchOrgName(), refetchProposals()])
-      } else if (proposal.type === 'addMember') {
-        // 调用无参的 execMembership
+      } 
+      // 👇 加上 transfer 的执行逻辑
+      else if (proposal.type === 'transfer') {
+        const hash = await writeContractAsync({
+          address: PROPOSAL_SIGN_ADDRESS, 
+          abi: ProposalSignABI, 
+          functionName: 'execTransfer',
+          args: [],
+        })
+        if (publicClient) await publicClient.waitForTransactionReceipt({ hash })
+        // 执行完 transfer 后，资产余额会变，需要刷新余额和提案列表
+        await Promise.all([refetchProposals(), refetchBalances()])
+      } 
+      else if (proposal.type === 'addMember') {
         const hash = await writeContractAsync({
           address: PROPOSAL_SIGN_ADDRESS, abi: ProposalSignABI, functionName: 'execMembership',
           args: [],
         })
         if (publicClient) await publicClient.waitForTransactionReceipt({ hash })
-        // 执行完 membership 后，signers 列表会变，需要刷新
         await Promise.all([refetchProposals(), refetchSigners()])
       }
     } catch (e: any) {
