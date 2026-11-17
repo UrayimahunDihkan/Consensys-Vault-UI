@@ -1,7 +1,7 @@
 // src/components/VaultCard.tsx
 import { formatUnits } from 'viem'
 import { formatAddress, formatLongAddress } from '../utils/format'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 
 // 引入相关类型
 interface Token { address: string; symbol: string; name: string; decimals: number }
@@ -15,7 +15,7 @@ interface VaultCardProps {
   formattedNative: string
   isNativeLoading: boolean
   tokens: Token[]
-  tokenBalances: any // 这里可以用更精确的 viem 类型
+  tokenBalances: any
   isTokensLoading: boolean
   allSigners?: readonly `0x${string}`[]
   walletAddress?: string
@@ -36,6 +36,14 @@ export function VaultCard({
   const [copiedSigner, setCopiedSigner] = useState<string | null>(null)
 
   const SMART_WALLET_ADDRESS = import.meta.env.VITE_SMART_WALLET_ADDRESS as `0x${string}`
+
+  // 👇 判断当前连接的钱包是否是 Signer
+  const isCurrentUserSigner = useMemo(() => {
+    if (!walletAddress || !allSigners) return false
+    return allSigners.some(
+      (signer) => signer.toLowerCase() === walletAddress.toLowerCase()
+    )
+  }, [walletAddress, allSigners])
 
   const handleCopyAddress = async () => {
     try {
@@ -84,6 +92,19 @@ export function VaultCard({
       {/* Body */}
       {isConnected ? (
         <div className="p-6 space-y-6 animate-[fadeIn_0.3s_ease-out]">
+          
+          {/* 👇 新增：非 Signer 警告横幅 */}
+          {!isCurrentUserSigner && (
+            <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-200 text-sm">
+              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div>
+                <span className="font-semibold">Read-Only Mode:</span> Your connected wallet is not a DAO Signer. You can view assets and proposals, but you cannot sign or execute them.
+              </div>
+            </div>
+          )}
+
           {/* Vault Address */}
           <div className="flex flex-wrap justify-between items-center gap-4 bg-[#0a0a0a] p-4 rounded-xl border border-[#2a2a2a]">
             <div>
@@ -152,22 +173,30 @@ export function VaultCard({
             </h2>
             <div className="flex flex-wrap gap-2">
               {allSigners && allSigners.length > 0 ? (
-                allSigners.map((signer) => (
-                  <div 
-                    key={signer}
-                    onClick={() => handleCopySigner(signer)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#1a1a1a]/80 border border-[#333] hover:border-[#555] rounded-lg text-xs font-mono text-gray-300 cursor-pointer transition-colors group relative"
-                    title={signer}
-                  >
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                    {formatAddress(signer)}
-                    {copiedSigner === signer && (
-                      <span className="absolute -top-7 left-1/2 -translate-x-1/2 bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded shadow pointer-events-none">
-                        Copied!
-                      </span>
-                    )}
-                  </div>
-                ))
+                allSigners.map((signer) => {
+                  // 👇 让当前连接的 Signer 高亮显示
+                  const isSelf = walletAddress && signer.toLowerCase() === walletAddress.toLowerCase()
+                  return (
+                    <div 
+                      key={signer}
+                      onClick={() => handleCopySigner(signer)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg text-xs font-mono cursor-pointer transition-colors group relative ${
+                        isSelf 
+                          ? 'bg-orange-500/20 border-orange-500/50 text-orange-200' 
+                          : 'bg-[#1a1a1a]/80 border-[#333] hover:border-[#555] text-gray-300'
+                      }`}
+                      title={signer}
+                    >
+                      <div className={`w-1.5 h-1.5 rounded-full ${isSelf ? 'bg-orange-400' : 'bg-emerald-500'}`}></div>
+                      {formatAddress(signer)} {isSelf && '(You)'}
+                      {copiedSigner === signer && (
+                        <span className="absolute -top-7 left-1/2 -translate-x-1/2 bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded shadow pointer-events-none">
+                          Copied!
+                        </span>
+                      )}
+                    </div>
+                  )
+                })
               ) : (
                 <div className="text-xs text-gray-500 italic py-2">No signers found.</div>
               )}

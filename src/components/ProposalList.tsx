@@ -30,6 +30,7 @@ interface ProposalListProps {
   onSign: (proposal: Proposal) => void 
   onExecute: (proposal: Proposal) => void
   executingHash: string | null
+  isCurrentUserSigner: boolean // 👈 新增：当前钱包是否是 Signer
 }
 
 const TYPE_LABEL: Record<ProposalType, string> = {
@@ -43,7 +44,8 @@ export function ProposalList({
   formatAddress, 
   onSign, 
   onExecute, 
-  executingHash 
+  executingHash,
+  isCurrentUserSigner // 👈 接收这个新参数
 }: ProposalListProps) {
   const rendered = useMemo(() => proposals, [proposals])
 
@@ -183,20 +185,26 @@ export function ProposalList({
               </div>
             </div>
 
-            {/* 签名按钮 */}
+            {/* 👇 签名按钮：如果是 Signer 才显示并可用，否则置灰 */}
             {isActionable && (prop.execFlow === 0 || prop.execFlow === 1) && (
               <button
                 onClick={() => onSign(prop)}
-                className="w-full py-1 text-emerald-800 hover:bg-emerald-800/10 hover:text-emerald-900 text-[11px] font-bold tracking-widest uppercase rounded transition-colors flex items-center justify-center gap-1.5"
+                disabled={!isCurrentUserSigner}
+                className={`w-full py-1 text-[11px] font-bold tracking-widest uppercase rounded transition-colors flex items-center justify-center gap-1.5 ${
+                  isCurrentUserSigner 
+                    ? 'text-emerald-800 hover:bg-emerald-800/10 hover:text-emerald-900'
+                    : 'text-gray-400 cursor-not-allowed bg-black/5'
+                }`}
+                title={!isCurrentUserSigner ? "Only DAO Signers can sign proposals." : ""}
               >
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                 </svg>
-                Sign Here
+                {isCurrentUserSigner ? 'Sign Here' : 'Not a Signer'}
               </button>
             )}
 
-            {/* 执行按钮 */}
+            {/* 执行按钮 (不需要限制权限，因为执行通常是公开的，且只执行已签满的提案) */}
             {isActionable && isSignComplete && !isExecuted && (
               <button
                 onClick={() => onExecute(prop)}
