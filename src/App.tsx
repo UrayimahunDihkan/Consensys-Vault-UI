@@ -1,6 +1,6 @@
 // src/App.tsx
 import { useAccount, useConnect, useDisconnect, useBalance, useChainId, useReadContracts, usePublicClient, useReadContract, useWriteContract } from 'wagmi'
-import { formatUnits, isAddress, parseUnits } from 'viem'
+import { formatUnits, isAddress } from 'viem'
 import { useState, useMemo } from 'react'
 import { SmartWalletABI } from './abi/SmartWalletABI' 
 import { ProposalSignABI } from './abi/ProposalSignABI' 
@@ -11,7 +11,7 @@ import { AddTokenModal } from './components/AddTokenModal'
 import { TopActions } from './components/TopActions'
 import { SignConfirmModal } from './components/SignConfirmModal'
 import { VaultCard } from './components/VaultCard'
-import { formatAddress, formatLongAddress } from './utils/format'
+import { formatAddress } from './utils/format'
 
 const SMART_WALLET_ADDRESS = import.meta.env.VITE_SMART_WALLET_ADDRESS as `0x${string}`
 const PROPOSAL_SIGN_ADDRESS = import.meta.env.VITE_PROPOSAL_SIGN_ADDRESS as `0x${string}`
@@ -67,23 +67,11 @@ function App() {
 
   const [tokens, setTokens] = useState<Token[]>(INITIAL_TOKENS)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const [copied, setCopied] = useState(false)
-  // 👇 用于 signers 的复制反馈
-  const [copiedSigner, setCopiedSigner] = useState<string | null>(null)
 
   const [isProposalModalOpen, setIsProposalModalOpen] = useState(false)
   const [proposalType, setProposalType] = useState<ProposalType>('changeOrgName')
-  const [formError, setFormError] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const [newOrgName, setNewOrgName] = useState('')
-  const [transferTo, setTransferTo] = useState('')
-  const [transferValue, setTransferValue] = useState('')
   const [selectedCoinKey, setSelectedCoinKey] = useState<string>('native')
-  const [memberAccount, setMemberAccount] = useState('')
-  
-  // 👇 Membership 相关状态
-  const [membershipAction, setMembershipAction] = useState<number>(0) // 0=ADD_MEMBER, 1=DELETE_MEMBER
 
   const [signTarget, setSignTarget] = useState<Proposal | null>(null)
   const [isSigning, setIsSigning] = useState(false)
@@ -233,21 +221,12 @@ function App() {
     }
   }
 
-  const handleCopyAddress = async () => {
-    try {
-      await navigator.clipboard.writeText(SMART_WALLET_ADDRESS)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch (err) {}
-  }
-
-  const handleCopySigner = async (signer: string) => {
-    try {
-      await navigator.clipboard.writeText(signer)
-      setCopiedSigner(signer)
-      setTimeout(() => setCopiedSigner(null), 2000)
-    } catch (err) {}
-  }
+  const isCurrentUserSigner = useMemo(() => {
+    if (!address || !allSigners) return false
+    return allSigners.some(
+      (signer) => signer.toLowerCase() === address.toLowerCase()
+    )
+  }, [address, allSigners])
 
   let formattedNative = '0.0000'
   if (nativeBalance && nativeBalance.value !== undefined) {
@@ -272,81 +251,14 @@ function App() {
 
   const openProposalModal = (type: ProposalType) => {
     setProposalType(type)
-    setFormError('')
-    setNewOrgName('')
-    setTransferTo('')
-    setTransferValue('')
+    // setFormError('')
+    // setNewOrgName('')
+    // setTransferTo('')
+    // setTransferValue('')
     setSelectedCoinKey('native')
-    setMemberAccount('')
-    setMembershipAction(0)
+    // setMemberAccount('')
+    // setMembershipAction(0)
     setIsProposalModalOpen(true)
-  }
-
-  const validateForm = (): string | null => {
-    if (proposalType === 'changeOrgName') {
-      if (!newOrgName.trim()) return 'Org name cannot be empty'
-    }
-    if (proposalType === 'transfer') {
-      if (!isAddress(transferTo)) return 'Invalid recipient address'
-      if (!transferValue || Number(transferValue) <= 0) return 'Amount must be > 0'
-      if (!selectedCoin) return 'Please select a coin'
-    }
-    if (proposalType === 'addMember') {
-      if (!isAddress(memberAccount)) return 'Invalid member address'
-    }
-    return null
-  }
-
-  const submitProposal = async () => {
-    const err = validateForm()
-    if (err) { setFormError(err); return }
-
-    setFormError('')
-    setIsSubmitting(true)
-
-    try {
-      if (proposalType === 'changeOrgName') {
-        const hash = await writeContractAsync({
-          address: PROPOSAL_SIGN_ADDRESS, abi: ProposalSignABI, functionName: 'proposeOrgNameChange', args: [newOrgName],
-        })
-        if (publicClient) await publicClient.waitForTransactionReceipt({ hash })
-        await refetchProposals()
-        setIsProposalModalOpen(false)
-        return
-      }
-
-      if (proposalType === 'transfer') {
-        if (!selectedCoin) throw new Error('Coin not selected')
-        const amountInWei = parseUnits(transferValue, selectedCoin.decimals)
-        const tokenAddress = selectedCoin.address ?? '0x0000000000000000000000000000000000000000'
-        const hash = await writeContractAsync({
-          address: PROPOSAL_SIGN_ADDRESS, abi: ProposalSignABI, functionName: 'proposeTransfer',
-          args: [transferTo as `0x${string}`, tokenAddress as `0x${string}`, amountInWei],
-        })
-        if (publicClient) await publicClient.waitForTransactionReceipt({ hash })
-        await refetchProposals()
-        setIsProposalModalOpen(false)
-        return
-      }
-
-      if (proposalType === 'addMember') {
-        const hash = await writeContractAsync({
-          address: PROPOSAL_SIGN_ADDRESS, abi: ProposalSignABI, functionName: 'proposeMembership',
-          args: [memberAccount as `0x${string}`, membershipAction],
-        })
-        if (publicClient) await publicClient.waitForTransactionReceipt({ hash })
-        await refetchProposals()
-        setIsProposalModalOpen(false)
-        return
-      }
-
-      setIsProposalModalOpen(false)
-    } catch (e: any) {
-      console.error(e)
-      setFormError(e?.shortMessage || e?.message || 'Transaction failed')
-    } finally {
-      setIsSubmitting(false)
-    }
   }
 
   let currentAvailableBalance = '0.0000'
@@ -376,6 +288,7 @@ function App() {
             onSign={openSignConfirm} 
             onExecute={handleExecute} 
             executingHash={executingHash} 
+            isCurrentUserSigner={isCurrentUserSigner} 
           />
         )}
 
