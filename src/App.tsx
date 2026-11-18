@@ -1,5 +1,5 @@
 // src/App.tsx
-import { useAccount, useConnect, useDisconnect, useBalance, useChainId, useReadContracts, usePublicClient, useReadContract, useWriteContract } from 'wagmi'
+import { useAccount, useDisconnect, useBalance, useChainId, useReadContracts, usePublicClient, useReadContract, useWriteContract } from 'wagmi'
 import { formatUnits, isAddress } from 'viem'
 import { useState, useMemo } from 'react'
 import { SmartWalletABI } from './abi/SmartWalletABI' 
@@ -59,7 +59,6 @@ interface CoinOption {
 
 function App() {
   const { isConnected, chain, address } = useAccount()
-  const { connect, connectors, isPending } = useConnect()
   const { disconnect } = useDisconnect()
   const chainId = useChainId()
   const publicClient = usePublicClient()
@@ -106,7 +105,6 @@ function App() {
     query: { enabled: isConnected },
   })
 
-  // 👇 新增：获取所有的 Signers
   const { data: allSigners, refetch: refetchSigners } = useReadContract({
     address: PROPOSAL_SIGN_ADDRESS,
     abi: ProposalSignABI,
@@ -193,7 +191,6 @@ function App() {
         if (publicClient) await publicClient.waitForTransactionReceipt({ hash })
         await Promise.all([refetchOrgName(), refetchProposals()])
       } 
-      // 👇 加上 transfer 的执行逻辑
       else if (proposal.type === 'transfer') {
         const hash = await writeContractAsync({
           address: PROPOSAL_SIGN_ADDRESS, 
@@ -202,7 +199,6 @@ function App() {
           args: [],
         })
         if (publicClient) await publicClient.waitForTransactionReceipt({ hash })
-        // 执行完 transfer 后，资产余额会变，需要刷新余额和提案列表
         await Promise.all([refetchProposals(), refetchBalances()])
       } 
       else if (proposal.type === 'addMember') {
@@ -251,13 +247,7 @@ function App() {
 
   const openProposalModal = (type: ProposalType) => {
     setProposalType(type)
-    // setFormError('')
-    // setNewOrgName('')
-    // setTransferTo('')
-    // setTransferValue('')
     setSelectedCoinKey('native')
-    // setMemberAccount('')
-    // setMembershipAction(0)
     setIsProposalModalOpen(true)
   }
 
@@ -307,9 +297,8 @@ function App() {
           walletAddress={address}
           onOpenTransfer={() => openProposalModal('transfer')}
           onOpenAddToken={() => setIsAddModalOpen(true)}
-          onConnect={() => connect({ connector: connectors[0] })}
+          // 👈 删除了 onConnect 和 isPending
           onDisconnect={() => disconnect()}
-          isPending={isPending}
         />
       </div>
 

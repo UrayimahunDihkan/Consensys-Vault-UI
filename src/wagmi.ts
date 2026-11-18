@@ -1,7 +1,7 @@
 // src/wagmi.ts
 import { http, createConfig } from 'wagmi'
 import { mainnet, sepolia } from 'wagmi/chains'
-import { injected } from 'wagmi/connectors'
+import { injected, walletConnect } from 'wagmi/connectors'
 import { defineChain } from 'viem'
 
 // 1. 手动定义 Rootstock 链
@@ -14,16 +14,15 @@ const rootstock = defineChain({
       http: [import.meta.env.VITE_ROOTSTOCK_RPC_URL as string],
     },
   },
-  // blockExplorers: {
-  //   default: { name: 'Rootstock Explorer', url: 'https://explorer.rootstock.io' },
-  // },
 })
 
+const projectId = import.meta.env.VITE_WC_PROJECT_ID
+
 export const config = createConfig({
-  // 2. 把 rootstock 加到 chains 数组里
-  chains: [mainnet, sepolia, rootstock],
+  chains: [rootstock, mainnet, sepolia],
   connectors: [
     injected(),
+    walletConnect({ projectId, showQrModal: true }),
   ],
   transports: {
     [mainnet.id]: http(),
